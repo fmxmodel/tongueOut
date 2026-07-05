@@ -1,0 +1,24 @@
+{
+  "name": "arkit-avatar-viewer",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Track B1 (FLAME 2023 Open, CC-BY-4.0) viewer: load out/head_arkit.glb in three.js and drive up to 52 MediaPipe FaceLandmarker ARKit blendshape categories against the FLAME-supported morph targets by exact, case-sensitive categoryName -> morphTargetDictionary lookup. The GLB's morphTargetDictionary is the runtime source of truth; tongueOut/cheekPuff/cheekSquintLeft/cheekSquintRight (a-priori unsupported) plus any pod-demoted shapes are honest no-ops — logged for qa-verifier, never aliased or renamed.",
+  "scripts": {
+    "copy-assets": "node scripts/copy-mediapipe-assets.mjs",
+    "fetch-model": "node scripts/fetch-model.mjs",
+    "verify-names": "node scripts/verify-names.mjs",
+    "predev": "node scripts/copy-mediapipe-assets.mjs",
+    "dev": "vite",
+    "prebuild": "node scripts/copy-mediapipe-assets.mjs",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "0.10.14",
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}

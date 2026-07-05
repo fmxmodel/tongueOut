@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ARKit Avatar Viewer / Driver — Track B1 (FLAME 2023 Open)</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body { margin: 0; height: 100%; background: #0a0420; color: #eee;
+        font-family: system-ui, -apple-system, sans-serif; }
+      #app { position: fixed; inset: 0; }
+      .panel { position: fixed; background: rgba(10, 6, 34, 0.82); border: 1px solid #2a2350;
+        border-radius: 10px; padding: 10px 12px; font-size: 12px; line-height: 1.5;
+        backdrop-filter: blur(4px); max-width: 360px; }
+      #controls { top: 10px; left: 10px; display: flex; flex-direction: column; gap: 8px; }
+      #panels { top: 10px; right: 10px; display: flex; flex-direction: column; gap: 8px; }
+      #status { min-height: 1.4em; }
+      #status[data-kind="error"] { color: #ff9a9a; }
+      .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      button { background: #4338ca; color: #fff; border: 0; border-radius: 6px;
+        padding: 6px 12px; font-size: 12px; cursor: pointer; }
+      button:disabled { background: #333; color: #888; cursor: default; }
+      select, input[type="file"] { background: #14103a; color: #eee; border: 1px solid #2a2350;
+        border-radius: 6px; padding: 4px; font-size: 12px; }
+      code { background: #1c1740; padding: 0 3px; border-radius: 3px; }
+      .ok { color: #8ef0c0; }
+      .warn { color: #ffcf7a; }
+      #coverage ul, #unresolved ul { margin: 4px 0 0; padding-left: 16px; }
+      #video { position: fixed; bottom: 10px; left: 10px; width: 180px; border-radius: 8px;
+        border: 1px solid #2a2350; opacity: 0.9; }
+      h1 { font-size: 13px; margin: 0 0 2px; letter-spacing: 0.02em; }
+      .hint { opacity: 0.65; }
+      #creditsBtn { background: transparent; color: #b9b2ff; text-decoration: underline;
+        padding: 2px 0; font-size: 11px; }
+      #credits { position: fixed; inset: 0; margin: auto; width: min(560px, 92vw);
+        max-height: 82vh; overflow: auto; display: none; z-index: 10; }
+      #credits.open { display: block; }
+      #credits h2 { font-size: 14px; margin: 0 0 8px; }
+      #credits h3 { font-size: 12px; margin: 12px 0 3px; color: #cfe9ff; }
+      #credits p, #credits blockquote { margin: 4px 0; }
+      #credits blockquote { border-left: 2px solid #4338ca; padding-left: 8px;
+        margin-left: 0; color: #d7d2ff; }
+      #credits a { color: #8ef0c0; }
+      #creditsClose { position: absolute; top: 8px; right: 10px; padding: 2px 8px; }
+      #creditsBackdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+        display: none; z-index: 9; }
+      #creditsBackdrop.open { display: block; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <div id="controls" class="panel">
+      <h1>ARKit Avatar Viewer / Driver</h1>
+      <div id="status">booting…</div>
+      <div class="row">
+        <label for="source">Source</label>
+        <select id="source">
+          <option value="webcam">Webcam (live)</option>
+          <option value="file">Video file</option>
+        </select>
+        <input id="fileInput" type="file" accept="video/*" style="display:none" />
+      </div>
+      <div class="row">
+        <button id="startBtn">Start</button>
+        <button id="stopBtn" disabled>Stop</button>
+        <label class="row"><input id="mirror" type="checkbox" checked /> mirror</label>
+      </div>
+      <div class="row">
+        <label for="smoothing">Smoothing</label>
+        <input id="smoothing" type="range" min="0" max="0.95" step="0.05" />
+        <span id="smoothingLabel">0.60</span>
+      </div>
+      <div class="hint">
+        Drives <code>morphTargetInfluences</code> by exact case-sensitive
+        <code>categoryName</code> → <code>morphTargetDictionary</code> lookup. No renames.
+      </div>
+      <button id="creditsBtn" type="button">Credits / Licenses</button>
+    </div>
+
+    <div id="creditsBackdrop"></div>
+    <div id="credits" class="panel" role="dialog" aria-modal="true" aria-labelledby="creditsTitle">
+      <button id="creditsClose" type="button">Close ✕</button>
+      <h2 id="creditsTitle">Credits &amp; Licenses</h2>
+      <p class="hint">Third-party components this product uses or redistributes. Full texts:
+        <a id="noticesLink" href="THIRD-PARTY-NOTICES.md" target="_blank" rel="noopener">THIRD-PARTY-NOTICES.md</a>.</p>
+
+      <h3>FLAME 2023 (Open) head model — CC-BY-4.0</h3>
+      <blockquote>
+        This product uses the FLAME 2023 (Open) head model by the Max Planck Institute for
+        Intelligent Systems, licensed under CC-BY-4.0
+        (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">creativecommons.org/licenses/by/4.0/</a>).
+        The model was fit to an input image, re-textured, and rigged; these are modifications of
+        the original. FLAME: Tianye Li, Timo Bolkart, Michael J. Black, Hao Li, Javier Romero,
+        “Learning a model of facial shape and expression from 4D scans,” ACM Transactions on
+        Graphics (SIGGRAPH Asia) 2017.
+      </blockquote>
+
+      <h3>MediaPipe / @mediapipe/tasks-vision — Apache-2.0</h3>
+      <p>Face tracking by MediaPipe FaceLandmarker. Copyright 2019–2024 The MediaPipe Authors
+        (Google LLC). The FaceLandmarker WASM binaries are redistributed under the Apache
+        License 2.0 —
+        <a href="licenses/mediapipe-Apache-2.0-LICENSE.txt" target="_blank" rel="noopener">full license text</a>.
+        Upstream ships no NOTICE file, so no NOTICE content applies (§4(d) not triggered).</p>
+
+      <h3>three.js — MIT</h3>
+      <p>Rendering by three.js. Copyright © 2010-2024 three.js authors. MIT License —
+        <a href="licenses/three.js-MIT-LICENSE.txt" target="_blank" rel="noopener">full license text</a>.</p>
+
+      <h3>Pod-side build tools (not shipped)</h3>
+      <p class="hint">PyTorch3D (BSD-3), OpenCV (Apache-2.0), and Blender (GPL) are used only to
+        <em>build</em> the head asset on the reconstruction pod. Their code/binaries are not
+        included in this web product, so their notices are not required here (recorded decision;
+        see THIRD-PARTY-NOTICES.md §4).</p>
+    </div>
+
+    <div id="panels">
+      <div id="coverage" class="panel">Coverage: waiting…</div>
+      <div id="unresolved" class="panel"><b>Unresolved MediaPipe names:</b> none</div>
+    </div>
+
+    <video id="video" playsinline muted></video>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

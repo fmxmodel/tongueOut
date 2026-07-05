@@ -1,0 +1,12 @@
+{
+  "tex_res": 1024,
+  "texels_covered": 646263,
+  "texels_direct": 153273,
+  "texels_mirror": 63444,
+  "texels_inpaint": 429546,
+  "winding_facing_sign": "dot<0",
+  "uv_source": "generated-clean-room:xatlas/0.0.11 (MIT) from flame2023.pkl v_template+f; deterministic default options",
+  "no_statistical_albedo_prior": true,
+  "note_shaded_appearance": "Baked map is the photo's SHADED appearance (delighting priors are license-barred); recorded for QA.",
+  "runtime_s": 8.602145671844482
+}

@@ -1,0 +1,93 @@
+{
+  "schema": "b1-shapes-run-manifest/1.0",
+  "generated_utc": "2026-07-05T10:31:47Z",
+  "counts": {
+    "supported": 20,
+    "unsupported": 32
+  },
+  "per_shape_measured": {
+    "eyeLookDownLeft": {
+      "max_delta_m": 0.0059152900737618076,
+      "sha256": "0c14c8da641c85022b527b2c3ab5942e1ef226b4251e22d93f202e14b615ff7c"
+    },
+    "eyeLookInLeft": {
+      "max_delta_m": 0.0059154894722208305,
+      "sha256": "2734826db31ec2b02c53a0a6dbf0431a6e88c934137b62bb310feefb0b254959"
+    },
+    "eyeLookOutLeft": {
+      "max_delta_m": 0.005915496873023349,
+      "sha256": "1cb7db44f44b6c3fb0ca1e6d68471c27d1cd64fefe1624fa8e11719630db8728"
+    },
+    "eyeLookUpLeft": {
+      "max_delta_m": 0.0046161813566011544,
+      "sha256": "ab5e2b51c302ce5dcf34e2151f27e806d1e93ad22e7f9a13af8fef3ee23e8e6f"
+    },
+    "eyeLookDownRight": {
+      "max_delta_m": 0.00589564444944146,
+      "sha256": "567adf46e9f0f2c271f0ff0459880e3ef8d93a0c7e16b5d90d4d8bdd0522819a"
+    },
+    "eyeLookInRight": {
+      "max_delta_m": 0.005899070285737627,
+      "sha256": "96a32edfd9e3f303b113fb491f72f1df7940056d3b70e535f1e38e51efdedb87"
+    },
+    "eyeLookOutRight": {
+      "max_delta_m": 0.005899068566476336,
+      "sha256": "539d7beb1e7dc34c4e6528b58579262ce161452984ddb36466c418990e17909f"
+    },
+    "eyeLookUpRight": {
+      "max_delta_m": 0.004600853401818994,
+      "sha256": "54f14422e25a6131526c8ce7e1b8df0b82609c050c143a6a87c048d1d0453365"
+    },
+    "jawForward": {
+      "max_delta_m": 0.005665615200996399,
+      "sha256": "0c9283c1522f4d834be710c33c216b30abe2e9a90564a8f509edcabe2311a47b"
+    },
+    "jawLeft": {
+      "max_delta_m": 0.01341320813656136,
+      "sha256": "7d41a179f472b6ac2991ee13e6ba2cd1f63850384ac1fe07bb26cdbdfeefcebc"
+    },
+    "jawRight": {
+      "max_delta_m": 0.013403180989415439,
+      "sha256": "ea34c2bcf015a022b91ddbf9e5b63b59b93f76d0e388f842d37935a26b8d8d22"
+    },
+    "jawOpen": {
+      "max_delta_m": 0.046291842595744856,
+      "sha256": "46df5ac075b2c8458872117debc1df84add784d4bdfc35e27fa0a6b7849095ad"
+    },
+    "mouthFunnel": {
+      "max_delta_m": 0.006925470485650497,
+      "sha256": "d462306237fcf7a7b9526edf82226e08e3c5eae5c20f459da2793fcb6543af07"
+    },
+    "mouthPucker": {
+      "max_delta_m": 0.008008765630434492,
+      "sha256": "f3f23510c6bc3896b786aba9ee8b6834d109b53376584b92c874f5aff1c93f37"
+    },
+    "mouthDimpleLeft": {
+      "max_delta_m": 0.0039280564427387156,
+      "sha256": "8737be575d286958aa1883331def857faa7d97a1624045e5cc2057e616579998"
+    },
+    "mouthDimpleRight": {
+      "max_delta_m": 0.004057243680942017,
+      "sha256": "28bb6dbdb71613748c39214cb308753adbc98549448b244ee2756e731aeb2f02"
+    },
+    "mouthRollLower": {
+      "max_delta_m": 0.003412719639644116,
+      "sha256": "0aa2e51707137870eb54b6d9f9710fb621b42e2f5e8f1f43b7a31889a9ab28d5"
+    },
+    "mouthRollUpper": {
+      "max_delta_m": 0.0033043777293274793,
+      "sha256": "a165667415ad195d91ffb4134e0ec0cfcc761cbbcac697fcac50873061b0cadb"
+    },
+    "mouthShrugLower": {
+      "max_delta_m": 0.0035638268585987914,
+      "sha256": "2daea1dedf25a66d8f229baf6c8e9490a4e504f02671a5318bd67a83dd74b851"
+    },
+    "mouthShrugUpper": {
+      "max_delta_m": 0.0034964025977337987,
+      "sha256": "89bc9364920e063f2b17d1241e8bc3025798a547b11709014d7c09e170a2be8e"
+    }
+  },
+  "failures": [],
+  "verdict": "PASS",
+  "runtime_s": 0.10279607772827148
+}

@@ -1,0 +1,36 @@
+# --- secrets / infra (NEVER commit) ---
+runpod_build_key
+runpod_build_key.pub
+ssh.md
+scratch_gen_map.py
+*.pem
+id_ed25519*
+id_rsa*
+*.ppk
+.claude/audit.log
+.claude/settings.local.json
+
+# --- large vendored repos / models (not redistributed) ---
+vendor/
+FLAME2023Open.zip
+*.zip
+*.pkl
+*.npy
+*.npz
+
+# --- node ---
+node_modules/
+out/viewer/dist/
+
+# --- python ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# --- blender / heavy binaries ---
+*.blend
+*.blend1
+
+# --- os ---
+.DS_Store

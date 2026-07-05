@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "model": "claude-opus-4-8",
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Glob",
+      "Grep",
+      "Agent",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(pip:*)",
+      "Bash(pip3:*)",
+      "Bash(conda:*)",
+      "Bash(uv:*)",
+      "Bash(blender:*)",
+      "Bash(node:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(git:*)",
+      "Bash(wget:*)",
+      "Bash(curl:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/.env)",
+      "Read(./secrets/**)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Bash(rm -rf /)",
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~)",
+      "Bash(rm -rf ~/*)",
+      "Bash(sudo rm:*)",
+      "Bash(git push --force:*)",
+      "Bash(curl* | sh)",
+      "Bash(curl* | bash)"
+    ],
+    "ask": [
+      "Bash(git push:*)"
+    ],
+    "additionalDirectories": []
+  },
+  "env": {
+    "AVATAR_PIPELINE_ROOT": "${CLAUDE_PROJECT_DIR}",
+    "AVATAR_OUT_DIR": "${CLAUDE_PROJECT_DIR}/out",
+    "PYTHONUNBUFFERED": "1"
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf 'GOVERNANCE: bypassPermissions ACTIVE. Fable=hard stages (reconstruct/rig), Opus-4.8=all others. Licensing gate (license-compliance) is a hard blocker before any commercial ship. See GOVERNANCE.md.\\n'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "mkdir -p \"${CLAUDE_PROJECT_DIR}/.claude\" && printf '%s\\tartifact-written\\n' \"$(date -u +%FT%TZ)\" >> \"${CLAUDE_PROJECT_DIR}/.claude/audit.log\""
+          }
+        ]
+      }
+    ]
+  }
+}

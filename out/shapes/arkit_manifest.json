@@ -1,0 +1,1290 @@
+{
+  "schema": "b1-arkit-shape-manifest/1.0",
+  "generated_utc": "2026-07-05T10:31:45.981249+00:00",
+  "generated_by": "arkit-rigger (Track B1) -- rig/build_arkit_shapes.py, MEASURED on the GPU pod",
+  "run_state": "measured-on-pod",
+  "name_contract": "/workspace/newarc/out/arkit_51_52_map.json",
+  "topology": {
+    "n_vertices": 5023,
+    "n_faces": 9976,
+    "faces_npy_sha256": "0e1dc70f945eb944daea3a3c23e5700f2b782e0ec302cd3cfb056c677345475f",
+    "contract": "out/recon/faces.npy (byte-locked; every PLY re-read and compared)"
+  },
+  "laterality": {
+    "axiom": "FLAME/SMPL canonical +X = subject-left (verified 3 ways below)",
+    "neutral_mesh_checks_m": {
+      "eye_L_all(+x)": 0.03437490637103716,
+      "eye_R_all(-x)": 0.032499296590685844,
+      "brow_L(+x)": 0.03079392425715923,
+      "brow_R(-x)": 0.02481418736279011,
+      "corner_L54(+x)": 0.029599519446492195,
+      "corner_R48(-x)": 0.03161321580410004,
+      "nostril_L35(+x)": 0.017139121890068054,
+      "nostril_R31(-x)": 0.017329059541225433
+    },
+    "photo_cross_check_px": {
+      "flame_uL_minus_uR": 260.8672180175781,
+      "mediapipe_uL_minus_uR": 255.8053131103515
+    },
+    "eye_joint_left": 3,
+    "eye_joint_right": 4
+  },
+  "units_m": {
+    "MW": 0.061463644042898086,
+    "BH_L": 0.035531292951485355,
+    "BH_R": 0.03525740637307406,
+    "ABS": 1.0,
+    "BH_MEAN": 0.03539434966227971,
+    "EH_L": 0.00947047061933218,
+    "EH_R": 0.008468169172055055
+  },
+  "jaw_calibration": {
+    "open_sign_axis": [
+      0.36000001430511475,
+      0.0,
+      0.0
+    ],
+    "open_lip_drop_m": 0.03407768035928408,
+    "lat_axis_index": 1,
+    "lat_dx_m": 0.012948131188750267
+  },
+  "counts": {
+    "total": 52,
+    "supported": 20,
+    "unsupported": 32
+  },
+  "demoted_by_gates": [
+    "eyeBlinkLeft",
+    "eyeSquintLeft",
+    "eyeWideLeft",
+    "eyeBlinkRight",
+    "eyeSquintRight",
+    "eyeWideRight",
+    "mouthClose",
+    "mouthRight",
+    "mouthLeft",
+    "mouthSmileLeft",
+    "mouthSmileRight",
+    "mouthFrownLeft",
+    "mouthFrownRight",
+    "mouthStretchLeft",
+    "mouthStretchRight",
+    "mouthPressLeft",
+    "mouthPressRight",
+    "mouthLowerDownLeft",
+    "mouthLowerDownRight",
+    "mouthUpperUpLeft",
+    "mouthUpperUpRight",
+    "browDownLeft",
+    "browDownRight",
+    "browInnerUp",
+    "browOuterUpLeft",
+    "browOuterUpRight",
+    "noseSneerLeft",
+    "noseSneerRight"
+  ],
+  "shapes": {
+    "eyeBlinkLeft": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.8549564818983771,
+        "amp_ratio": 0.24705397471445611,
+        "max_delta_m": 0.0026551396670193876,
+        "solver": {
+          "lambda": 3.9013701634805064e-06,
+          "lambda_escalations": 3,
+          "e_norm": 2.063482588491114,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.9692777345913554,
+        "stabilizer_ratio": 0.7540864397254622
+      },
+      "reason": "amplitude ratio 0.25 outside [0.3,3.0]; mirror-side leakage 0.97 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Upper lid closes 85% of the measured aperture, lower rises 10%. Lid closure exists in FLAME 2023's expression space; gates verify per-eye isolation.",
+      "ply": null
+    },
+    "eyeLookDownLeft": {
+      "supported": true,
+      "status": "measured",
+      "method": "pose_eye",
+      "intended": "strong",
+      "max_delta_m": 0.0059152900737618076,
+      "mean_delta_m": 0.0005469229547846084,
+      "gates": {
+        "front_move_m": 0.004071785788983107,
+        "eye_verts": 546
+      },
+      "reason": null,
+      "notes": "Eye JOINT rotation (eyeball only; lids do not follow -- honest limitation). Joint<->side mapping and rotation signs are measured on the pod, never assumed.",
+      "ply": "out/shapes/expr_eyeLookDownLeft.ply",
+      "params": {
+        "eye_joint": 3,
+        "eye_pose_aa": [
+          0.45,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "eyeLookInLeft": {
+      "supported": true,
+      "status": "measured",
+      "method": "pose_eye",
+      "intended": "strong",
+      "max_delta_m": 0.0059154894722208305,
+      "mean_delta_m": 0.0005465068269291976,
+      "gates": {
+        "front_move_m": 0.004032047484070062,
+        "eye_verts": 546
+      },
+      "reason": null,
+      "notes": "Eye JOINT rotation (eyeball only; lids do not follow -- honest limitation). Joint<->side mapping and rotation signs are measured on the pod, never assumed.",
+      "ply": "out/shapes/expr_eyeLookInLeft.ply",
+      "params": {
+        "eye_joint": 3,
+        "eye_pose_aa": [
+          0.0,
+          -0.45,
+          0.0
+        ]
+      }
+    },
+    "eyeLookOutLeft": {
+      "supported": true,
+      "status": "measured",
+      "method": "pose_eye",
+      "intended": "strong",
+      "max_delta_m": 0.005915496873023349,
+      "mean_delta_m": 0.0005465069372564913,
+      "gates": {
+        "front_move_m": 0.004112431748459737,
+        "eye_verts": 546
+      },
+      "reason": null,
+      "notes": "Eye JOINT rotation (eyeball only; lids do not follow -- honest limitation). Joint<->side mapping and rotation signs are measured on the pod, never assumed.",
+      "ply": "out/shapes/expr_eyeLookOutLeft.ply",
+      "params": {
+        "eye_joint": 3,
+        "eye_pose_aa": [
+          0.0,
+          0.45,
+          0.0
+        ]
+      }
+    },
+    "eyeLookUpLeft": {
+      "supported": true,
+      "status": "measured",
+      "method": "pose_eye",
+      "intended": "strong",
+      "max_delta_m": 0.0046161813566011544,
+      "mean_delta_m": 0.0004268086923987296,
+      "gates": {
+        "front_move_m": 0.0032105554454028608,
+        "eye_verts": 546
+      },
+      "reason": null,
+      "notes": "Eye JOINT rotation (eyeball only; lids do not follow -- honest limitation). Joint<->side mapping and rotation signs are measured on the pod, never assumed.",
+      "ply": "out/shapes/expr_eyeLookUpLeft.ply",
+      "params": {
+        "eye_joint": 3,
+        "eye_pose_aa": [
+          -0.35,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "eyeSquintLeft": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "weak",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.8834008534118845,
+        "amp_ratio": 0.32125037395836675,
+        "max_delta_m": 0.0011619237544437284,
+        "solver": {
+          "lambda": 3.9013701634805066e-07,
+          "lambda_escalations": 2,
+          "e_norm": 3.1307838453366434,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.6580494520206965,
+        "stabilizer_ratio": 0.5375635709263737
+      },
+      "reason": "mirror-side leakage 0.66 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Lower-lid raise; flagged weak in FLAME PCA by the reconstructor -- gates adjudicate.",
+      "ply": null
+    },
+    "eyeWideLeft": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "weak",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.9644688301546349,
+        "amp_ratio": 0.6537654110107908,
+        "max_delta_m": 0.00413296027183914,
+        "solver": {
+          "lambda": 3.6193785187819996e-07,
+          "lambda_escalations": 2,
+          "e_norm": 3.7347011618650825,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.9220235007801783,
+        "stabilizer_ratio": 0.31768045355075997
+      },
+      "reason": "mirror-side leakage 0.92 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Upper lid opens beyond neutral (negative gap factor); flagged weak -- gates adjudicate.",
+      "ply": null
+    },
+    "eyeBlinkRight": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.8470031363234215,
+        "amp_ratio": 0.28726418194627573,
+        "max_delta_m": 0.0023455940038402557,
+        "solver": {
+          "lambda": 3.924882150943041e-06,
+          "lambda_escalations": 3,
+          "e_norm": 1.9061907217453327,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.7920500777125633,
+        "stabilizer_ratio": 0.6663327682063706
+      },
+      "reason": "amplitude ratio 0.29 outside [0.3,3.0]; mirror-side leakage 0.79 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Upper lid closes 85% of the measured aperture, lower rises 10%. Lid closure exists in FLAME 2023's expression space; gates verify per-eye isolation.",
+      "ply": null
+    },
+    "eyeLookDownRight": {
+      "supported": true,
+      "status": "measured",
+      "method": "pose_eye",
+      "intended": "strong",
+      "max_delta_m": 0.00589564444944146,
+      "mean_delta_m": 0.0005459388590202957,
+      "gates": {
+        "front_move_m": 0.0040427224667409795,
+        "eye_verts": 546
+      },
+      "reason": null,
+      "notes": "Eye JOINT rotation (eyeball only; lids do not follow -- honest limitation). Joint<->side mapping and rotation signs are measured on the pod, never assumed.",
+      "ply": "out/shapes/expr_eyeLookDownRight.ply",
+      "params": {
+        "eye_joint": 4,
+        "eye_pose_aa": [
+          0.45,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "eyeLookInRight": {
+      "supported": true,
+      "status": "measured",
+      "method": "pose_eye",
+      "intended": "strong",
+      "max_delta_m": 0.005899070285737627,
+      "mean_delta_m": 0.0005454953864092679,
+      "gates": {
+        "front_move_m": 0.0040767694274518665,
+        "eye_verts": 546
+      },
+      "reason": null,
+      "notes": "Eye JOINT rotation (eyeball only; lids do not follow -- honest limitation). Joint<->side mapping and rotation signs are measured on the pod, never assumed.",
+      "ply": "out/shapes/expr_eyeLookInRight.ply",
+      "params": {
+        "eye_joint": 4,
+        "eye_pose_aa": [
+          0.0,
+          0.45,
+          0.0
+        ]
+      }
+    },
+    "eyeLookOutRight": {
+      "supported": true,
+      "status": "measured",
+      "method": "pose_eye",
+      "intended": "strong",
+      "max_delta_m": 0.005899068566476336,
+      "mean_delta_m": 0.0005454947908523053,
+      "gates": {
+        "front_move_m": 0.003992360455310897,
+        "eye_verts": 546
+      },
+      "reason": null,
+      "notes": "Eye JOINT rotation (eyeball only; lids do not follow -- honest limitation). Joint<->side mapping and rotation signs are measured on the pod, never assumed.",
+      "ply": "out/shapes/expr_eyeLookOutRight.ply",
+      "params": {
+        "eye_joint": 4,
+        "eye_pose_aa": [
+          0.0,
+          -0.45,
+          0.0
+        ]
+      }
+    },
+    "eyeLookUpRight": {
+      "supported": true,
+      "status": "measured",
+      "method": "pose_eye",
+      "intended": "strong",
+      "max_delta_m": 0.004600853401818994,
+      "mean_delta_m": 0.00042604109774024764,
+      "gates": {
+        "front_move_m": 0.003175613661574212,
+        "eye_verts": 546
+      },
+      "reason": null,
+      "notes": "Eye JOINT rotation (eyeball only; lids do not follow -- honest limitation). Joint<->side mapping and rotation signs are measured on the pod, never assumed.",
+      "ply": "out/shapes/expr_eyeLookUpRight.ply",
+      "params": {
+        "eye_joint": 4,
+        "eye_pose_aa": [
+          -0.35,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "eyeSquintRight": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "weak",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.9003018953761479,
+        "amp_ratio": 0.3301606287095094,
+        "max_delta_m": 0.0013470815067244894,
+        "solver": {
+          "lambda": 3.924882150943041e-07,
+          "lambda_escalations": 2,
+          "e_norm": 2.79125190216497,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.7404609042245113,
+        "stabilizer_ratio": 0.6073854358314453
+      },
+      "reason": "mirror-side leakage 0.74 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Lower-lid raise; flagged weak in FLAME PCA by the reconstructor -- gates adjudicate.",
+      "ply": null
+    },
+    "eyeWideRight": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "weak",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.9418555995837402,
+        "amp_ratio": 0.6838482719669586,
+        "max_delta_m": 0.0030494073333025657,
+        "solver": {
+          "lambda": 3.6788623299235525e-07,
+          "lambda_escalations": 2,
+          "e_norm": 3.1302023166453687,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.6581220884649677,
+        "stabilizer_ratio": 0.27467950829524557
+      },
+      "reason": "mirror-side leakage 0.66 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Upper lid opens beyond neutral (negative gap factor); flagged weak -- gates adjudicate.",
+      "ply": null
+    },
+    "jawForward": {
+      "supported": true,
+      "status": "measured",
+      "method": "pose_jaw_fwd",
+      "intended": "strong",
+      "max_delta_m": 0.00566561758518219,
+      "mean_delta_m": 0.0004559035980591497,
+      "gates": {
+        "lip_fwd_m": 0.005539696633815766
+      },
+      "reason": null,
+      "notes": "FLAME's jaw joint is rotation-only; protrusion is synthesized as an LBS-weighted +Z TRANSLATION of the jaw joint (verts += w_jaw * t). Self-authored, rig-style approximation -- documented, not PCA.",
+      "ply": "out/shapes/expr_jawForward.ply",
+      "params": {
+        "jaw_joint_translation_m": [
+          0.0,
+          0.0,
+          0.006
+        ]
+      }
+    },
+    "jawLeft": {
+      "supported": true,
+      "status": "measured",
+      "method": "pose_jaw_lat",
+      "intended": "strong",
+      "max_delta_m": 0.01341320813656136,
+      "mean_delta_m": 0.000888000867224213,
+      "gates": {
+        "lat_dx_m": 0.012948131188750267
+      },
+      "reason": null,
+      "notes": "Jaw joint lateral axis (Y or Z, measured); sign chosen so the chin/lower lip moves to subject-left.",
+      "ply": "out/shapes/expr_jawLeft.ply",
+      "params": {
+        "jaw_pose_aa": [
+          0.0,
+          0.12,
+          0.0
+        ]
+      }
+    },
+    "jawRight": {
+      "supported": true,
+      "status": "measured",
+      "method": "pose_jaw_lat",
+      "intended": "strong",
+      "max_delta_m": 0.013403180989415439,
+      "mean_delta_m": 0.0008876942148098217,
+      "gates": {
+        "lat_dx_m": 0.012948131188750267
+      },
+      "reason": null,
+      "notes": "Mirror of jawLeft (same measured axis, opposite sign).",
+      "ply": "out/shapes/expr_jawRight.ply",
+      "params": {
+        "jaw_pose_aa": [
+          0.0,
+          -0.12,
+          0.0
+        ]
+      }
+    },
+    "jawOpen": {
+      "supported": true,
+      "status": "measured",
+      "method": "pose_jaw_open",
+      "intended": "strong",
+      "max_delta_m": 0.046291842595744856,
+      "mean_delta_m": 0.0030886604242217866,
+      "gates": {
+        "lip_drop_m": 0.03407768035928408
+      },
+      "reason": null,
+      "notes": "Jaw joint pitch; sign chosen by measuring that the lower inner lip drops. Magnitude JAW_OPEN_RAD.",
+      "ply": "out/shapes/expr_jawOpen.ply",
+      "params": {
+        "jaw_pose_aa": [
+          0.36000001430511475,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "mouthClose": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca_jawopen",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.8831285250089359,
+        "amp_ratio": 0.13316446736005033,
+        "max_delta_m": 0.0031940037104223923,
+        "solver": {
+          "lambda": 0.00013107954371410673,
+          "lambda_escalations": 4,
+          "e_norm": 1.2358849752176038,
+          "norm_clipped": false
+        },
+        "stabilizer_ratio": 0.26876257351559213
+      },
+      "reason": "amplitude ratio 0.13 outside [0.3,3.0]",
+      "notes": "Linearized at jawOpen (secant Jacobian, batched decode). Correct only in combination with jawOpen -- documented.",
+      "ply": null
+    },
+    "mouthFunnel": {
+      "supported": true,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": 0.006925470485650497,
+      "mean_delta_m": 0.0006905649633302253,
+      "gates": {
+        "target_cos": 0.9043053144220957,
+        "amp_ratio": 0.8512731104318424,
+        "max_delta_m": 0.006925470485650497,
+        "solver": {
+          "lambda": 4.222845563036281e-06,
+          "lambda_escalations": 2,
+          "e_norm": 2.387404719195771,
+          "norm_clipped": false
+        },
+        "stabilizer_ratio": 0.21987518608079426
+      },
+      "reason": null,
+      "notes": "Open-O: lips forward, inner aperture opens.",
+      "ply": "out/shapes/expr_mouthFunnel.ply",
+      "params": {
+        "e_norm": 2.387404719195771,
+        "lambda": 4.222845563036281e-06
+      }
+    },
+    "mouthPucker": {
+      "supported": true,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": 0.008008765630434492,
+      "mean_delta_m": 0.0007916829792706603,
+      "gates": {
+        "target_cos": 0.7007007866151868,
+        "amp_ratio": 0.5031447601336572,
+        "max_delta_m": 0.008008765630434492,
+        "solver": {
+          "lambda": 4.222845563036281e-05,
+          "lambda_escalations": 3,
+          "e_norm": 1.8294759391960962,
+          "norm_clipped": false
+        },
+        "stabilizer_ratio": 0.29762352235960865
+      },
+      "reason": null,
+      "notes": "Lips compress toward center and protrude (kiss).",
+      "ply": "out/shapes/expr_mouthPucker.ply",
+      "params": {
+        "e_norm": 1.8294759391960962,
+        "lambda": 4.222845563036281e-05
+      }
+    },
+    "mouthRight": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.5989654927752214,
+        "amp_ratio": 0.2525975207680801,
+        "max_delta_m": 0.0017584122290261511,
+        "solver": {
+          "lambda": 4.222845563036281e-05,
+          "lambda_escalations": 3,
+          "e_norm": 0.9960627632706316,
+          "norm_clipped": false
+        },
+        "stabilizer_ratio": 0.37061290620952153
+      },
+      "reason": "amplitude ratio 0.25 outside [0.3,3.0]",
+      "notes": "Whole mouth shifts to the SUBJECT's right.",
+      "ply": null
+    },
+    "mouthLeft": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.5989655429713827,
+        "amp_ratio": 0.2525975272684987,
+        "max_delta_m": 0.0017584122290261511,
+        "solver": {
+          "lambda": 4.222845563036281e-05,
+          "lambda_escalations": 3,
+          "e_norm": 0.9960627632706316,
+          "norm_clipped": false
+        },
+        "stabilizer_ratio": 0.3706129224856303
+      },
+      "reason": "amplitude ratio 0.25 outside [0.3,3.0]",
+      "notes": "Whole mouth shifts to the SUBJECT's left (+X, measured).",
+      "ply": null
+    },
+    "mouthSmileLeft": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.9539386882783872,
+        "amp_ratio": 0.6956786867630171,
+        "max_delta_m": 0.005495721624445772,
+        "solver": {
+          "lambda": 1.5978231565329261e-06,
+          "lambda_escalations": 2,
+          "e_norm": 3.718749692948199,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.8235023498265689,
+        "stabilizer_ratio": 0.4771408359062351
+      },
+      "reason": "mirror-side leakage 0.82 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Corner up + lateral; smiles dominate FLAME's scan corpus.",
+      "ply": null
+    },
+    "mouthSmileRight": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.7979751354944571,
+        "amp_ratio": 0.4472825035787139,
+        "max_delta_m": 0.0035013386216357838,
+        "solver": {
+          "lambda": 1.4890849964860652e-05,
+          "lambda_escalations": 3,
+          "e_norm": 1.2953127056258793,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.939328685344088,
+        "stabilizer_ratio": 0.5578178308961285
+      },
+      "reason": "mirror-side leakage 0.94 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Corner up + lateral; smiles dominate FLAME's scan corpus.",
+      "ply": null
+    },
+    "mouthFrownLeft": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.9716293542594528,
+        "amp_ratio": 0.6531677419579394,
+        "max_delta_m": 0.00441471776383675,
+        "solver": {
+          "lambda": 1.2235920063220297e-06,
+          "lambda_escalations": 2,
+          "e_norm": 3.5543360654447578,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.6791737307421927,
+        "stabilizer_ratio": 0.4087065720836264
+      },
+      "reason": "mirror-side leakage 0.68 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Corner depressor.",
+      "ply": null
+    },
+    "mouthFrownRight": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.9839327501082072,
+        "amp_ratio": 0.6795709628970352,
+        "max_delta_m": 0.004792711989088521,
+        "solver": {
+          "lambda": 1.0843187708878276e-06,
+          "lambda_escalations": 2,
+          "e_norm": 3.653065814534203,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.6781985145491098,
+        "stabilizer_ratio": 0.3828015697914541
+      },
+      "reason": "mirror-side leakage 0.68 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Corner depressor.",
+      "ply": null
+    },
+    "mouthDimpleLeft": {
+      "supported": true,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": 0.0039280564427387156,
+      "mean_delta_m": 0.0002551483970294481,
+      "gates": {
+        "target_cos": 0.9987846684444411,
+        "amp_ratio": 0.9313057674433901,
+        "max_delta_m": 0.0039280564427387156,
+        "solver": {
+          "lambda": 1.0312508027416656e-07,
+          "lambda_escalations": 1,
+          "e_norm": 2.633589954750102,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.4689864685127321,
+        "stabilizer_ratio": 0.1730126196077933
+      },
+      "reason": null,
+      "notes": "Corner retracts toward the cheek (buccinator); subtle.",
+      "ply": "out/shapes/expr_mouthDimpleLeft.ply",
+      "params": {
+        "e_norm": 2.633589954750102,
+        "lambda": 1.0312508027416656e-07
+      }
+    },
+    "mouthDimpleRight": {
+      "supported": true,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": 0.004057243680942017,
+      "mean_delta_m": 0.00024323055038754935,
+      "gates": {
+        "target_cos": 0.9990545078470952,
+        "amp_ratio": 0.9329026427361847,
+        "max_delta_m": 0.004057243680942017,
+        "solver": {
+          "lambda": 8.945814813130169e-08,
+          "lambda_escalations": 1,
+          "e_norm": 2.748235099153588,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.49594875947414657,
+        "stabilizer_ratio": 0.1730368020257147
+      },
+      "reason": null,
+      "notes": "Corner retracts toward the cheek (buccinator); subtle.",
+      "ply": "out/shapes/expr_mouthDimpleRight.ply",
+      "params": {
+        "e_norm": 2.748235099153588,
+        "lambda": 8.945814813130169e-08
+      }
+    },
+    "mouthStretchLeft": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.9533558407129464,
+        "amp_ratio": 0.25973629642323404,
+        "max_delta_m": 0.002531564528140395,
+        "solver": {
+          "lambda": 1.0312508027416656e-05,
+          "lambda_escalations": 3,
+          "e_norm": 1.3990228639839477,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.9310392872890635,
+        "stabilizer_ratio": 0.40865539587911875
+      },
+      "reason": "amplitude ratio 0.26 outside [0.3,3.0]; mirror-side leakage 0.93 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Corner out+down (risorius/platysma direction).",
+      "ply": null
+    },
+    "mouthStretchRight": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.985082294754343,
+        "amp_ratio": 0.30990260120426355,
+        "max_delta_m": 0.0028152592312132444,
+        "solver": {
+          "lambda": 8.945814813130169e-06,
+          "lambda_escalations": 3,
+          "e_norm": 1.4934144264996105,
+          "norm_clipped": false
+        },
+        "leak_ratio": 1.090314493103932,
+        "stabilizer_ratio": 0.39463734865072064
+      },
+      "reason": "mirror-side leakage 1.09 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Corner out+down (risorius/platysma direction).",
+      "ply": null
+    },
+    "mouthRollLower": {
+      "supported": true,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": 0.003412719639644116,
+      "mean_delta_m": 0.00020573476588470907,
+      "gates": {
+        "target_cos": 0.9956420254135592,
+        "amp_ratio": 0.9721081820310516,
+        "max_delta_m": 0.003412719639644116,
+        "solver": {
+          "lambda": 1.218751986317911e-07,
+          "lambda_escalations": 1,
+          "e_norm": 3.1888169214726303,
+          "norm_clipped": false
+        },
+        "stabilizer_ratio": 0.13609289708455527
+      },
+      "reason": null,
+      "notes": "Lower lip rolls inward over the teeth (landmark-level approximation; true roll needs volume FLAME lacks).",
+      "ply": "out/shapes/expr_mouthRollLower.ply",
+      "params": {
+        "e_norm": 3.1888169214726303,
+        "lambda": 1.218751986317911e-07
+      }
+    },
+    "mouthRollUpper": {
+      "supported": true,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": 0.0033043777293274793,
+      "mean_delta_m": 0.0001773661115678851,
+      "gates": {
+        "target_cos": 0.9930761751470503,
+        "amp_ratio": 0.9590695394271039,
+        "max_delta_m": 0.0033043777293274793,
+        "solver": {
+          "lambda": 2.059894922068234e-07,
+          "lambda_escalations": 1,
+          "e_norm": 2.8094658339711356,
+          "norm_clipped": false
+        },
+        "stabilizer_ratio": 0.18270703064212995
+      },
+      "reason": null,
+      "notes": "Upper lip rolls inward (same approximation caveat).",
+      "ply": "out/shapes/expr_mouthRollUpper.ply",
+      "params": {
+        "e_norm": 2.8094658339711356,
+        "lambda": 2.059894922068234e-07
+      }
+    },
+    "mouthShrugLower": {
+      "supported": true,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": 0.0035638268585987914,
+      "mean_delta_m": 0.00017662619805436467,
+      "gates": {
+        "target_cos": 0.9750158995418294,
+        "amp_ratio": 0.8529457344865249,
+        "max_delta_m": 0.0035638268585987914,
+        "solver": {
+          "lambda": 1.2187519863179111e-06,
+          "lambda_escalations": 2,
+          "e_norm": 2.910021630053377,
+          "norm_clipped": false
+        },
+        "stabilizer_ratio": 0.1286869895366082
+      },
+      "reason": null,
+      "notes": "Chin/mentalis pushes the lower lip up and out.",
+      "ply": "out/shapes/expr_mouthShrugLower.ply",
+      "params": {
+        "e_norm": 2.910021630053377,
+        "lambda": 1.2187519863179111e-06
+      }
+    },
+    "mouthShrugUpper": {
+      "supported": true,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": 0.0034964025977337987,
+      "mean_delta_m": 0.0002179109594454046,
+      "gates": {
+        "target_cos": 0.9860322387154247,
+        "amp_ratio": 0.9428767839059883,
+        "max_delta_m": 0.0034964025977337987,
+        "solver": {
+          "lambda": 2.059894922068234e-07,
+          "lambda_escalations": 1,
+          "e_norm": 3.34597384445774,
+          "norm_clipped": false
+        },
+        "stabilizer_ratio": 0.18024087813497364
+      },
+      "reason": null,
+      "notes": "Upper lip pushes up/out (philtrum shrug).",
+      "ply": "out/shapes/expr_mouthShrugUpper.ply",
+      "params": {
+        "e_norm": 3.34597384445774,
+        "lambda": 2.059894922068234e-07
+      }
+    },
+    "mouthPressLeft": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.9839832454562771,
+        "amp_ratio": 0.848427883752767,
+        "max_delta_m": 0.00193534993228778,
+        "solver": {
+          "lambda": 1.597823156532926e-07,
+          "lambda_escalations": 1,
+          "e_norm": 1.8520060735957717,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.6944044023104408,
+        "stabilizer_ratio": 0.46302957731967204
+      },
+      "reason": "mirror-side leakage 0.69 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "One-sided lip press (lips thin against each other).",
+      "ply": null
+    },
+    "mouthPressRight": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.9904290050629442,
+        "amp_ratio": 0.8780970237496663,
+        "max_delta_m": 0.001998076622646205,
+        "solver": {
+          "lambda": 1.4890849964860652e-07,
+          "lambda_escalations": 1,
+          "e_norm": 1.6958616983551518,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.6988047034674343,
+        "stabilizer_ratio": 0.4250432710886517
+      },
+      "reason": "mirror-side leakage 0.70 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "One-sided lip press (lips thin against each other).",
+      "ply": null
+    },
+    "mouthLowerDownLeft": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.9858466541798988,
+        "amp_ratio": 0.8117176559883341,
+        "max_delta_m": 0.003489892720079693,
+        "solver": {
+          "lambda": 6.599752002881952e-07,
+          "lambda_escalations": 2,
+          "e_norm": 2.2740168747098664,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.852819143858281,
+        "stabilizer_ratio": 0.3210136255081282
+      },
+      "reason": "mirror-side leakage 0.85 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Lower-lip depressor on one side.",
+      "ply": null
+    },
+    "mouthLowerDownRight": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.994206576694437,
+        "amp_ratio": 0.7792456458230919,
+        "max_delta_m": 0.0035849437005649218,
+        "solver": {
+          "lambda": 6.845393694204912e-07,
+          "lambda_escalations": 2,
+          "e_norm": 2.4650386244528804,
+          "norm_clipped": false
+        },
+        "leak_ratio": 1.029806118076304,
+        "stabilizer_ratio": 0.3583823592737878
+      },
+      "reason": "mirror-side leakage 1.03 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Lower-lip depressor on one side.",
+      "ply": null
+    },
+    "mouthUpperUpLeft": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.9961590016685832,
+        "amp_ratio": 0.8834435583981349,
+        "max_delta_m": 0.0037218370887691036,
+        "solver": {
+          "lambda": 9.675606433235992e-08,
+          "lambda_escalations": 1,
+          "e_norm": 3.4595298099386596,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.8339075086014436,
+        "stabilizer_ratio": 0.30928464443053655
+      },
+      "reason": "mirror-side leakage 0.83 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Upper-lip levator on one side.",
+      "ply": null
+    },
+    "mouthUpperUpRight": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.9937016557573611,
+        "amp_ratio": 0.8679745269571528,
+        "max_delta_m": 0.003748099153557067,
+        "solver": {
+          "lambda": 9.862518616071574e-08,
+          "lambda_escalations": 1,
+          "e_norm": 3.261241331958885,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.9429627333515616,
+        "stabilizer_ratio": 0.3389525124221815
+      },
+      "reason": "mirror-side leakage 0.94 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Upper-lip levator on one side.",
+      "ply": null
+    },
+    "browDownLeft": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.9707253899952512,
+        "amp_ratio": 0.23838601076015617,
+        "max_delta_m": 0.0030841916856044938,
+        "solver": {
+          "lambda": 5.1467255299849404e-05,
+          "lambda_escalations": 4,
+          "e_norm": 1.3560499455238209,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.9118007601748397,
+        "stabilizer_ratio": 0.5055945330060092
+      },
+      "reason": "amplitude ratio 0.24 outside [0.3,3.0]; mirror-side leakage 0.91 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Brow depressor; strongly present in FLAME expression scans.",
+      "ply": null
+    },
+    "browDownRight": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.9650843148986724,
+        "amp_ratio": 0.22338360928209935,
+        "max_delta_m": 0.0029670841457681125,
+        "solver": {
+          "lambda": 4.954209330351649e-05,
+          "lambda_escalations": 4,
+          "e_norm": 1.3336827300259428,
+          "norm_clipped": false
+        },
+        "leak_ratio": 1.018142669914348,
+        "stabilizer_ratio": 0.5450339349312864
+      },
+      "reason": "amplitude ratio 0.22 outside [0.3,3.0]; mirror-side leakage 1.02 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Brow depressor; strongly present in FLAME expression scans.",
+      "ply": null
+    },
+    "browInnerUp": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.9728789779371418,
+        "amp_ratio": 0.18628775070617457,
+        "max_delta_m": 0.0029701098079124755,
+        "solver": {
+          "lambda": 4.52367577829888e-05,
+          "lambda_escalations": 4,
+          "e_norm": 1.3625221945975967,
+          "norm_clipped": false
+        },
+        "stabilizer_ratio": 0.6176792049830275
+      },
+      "reason": "amplitude ratio 0.19 outside [0.3,3.0]",
+      "notes": "Single bilateral inner-brow raise (Apple ships ONE shape).",
+      "ply": null
+    },
+    "browOuterUpLeft": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.9756804178023277,
+        "amp_ratio": 0.6345429971966517,
+        "max_delta_m": 0.007707186289484404,
+        "solver": {
+          "lambda": 4.522230608543068e-06,
+          "lambda_escalations": 3,
+          "e_norm": 3.500544178771187,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.8628622417984617,
+        "stabilizer_ratio": 0.3737347854603825
+      },
+      "reason": "mirror-side leakage 0.86 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Outer brow raise.",
+      "ply": null
+    },
+    "browOuterUpRight": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "strong",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.963748162246679,
+        "amp_ratio": 0.5922154589025223,
+        "max_delta_m": 0.00761080635464993,
+        "solver": {
+          "lambda": 4.327140571509787e-06,
+          "lambda_escalations": 3,
+          "e_norm": 3.5322493849487704,
+          "norm_clipped": false
+        },
+        "leak_ratio": 1.018527231950294,
+        "stabilizer_ratio": 0.4195801048198534
+      },
+      "reason": "mirror-side leakage 1.02 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Outer brow raise.",
+      "ply": null
+    },
+    "cheekPuff": {
+      "supported": false,
+      "status": "measured",
+      "method": "none",
+      "intended": "unsupported",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {},
+      "reason": "No cheek handles exist in the iBUG-51 set and cheek inflation is essentially unspanned by FLAME's scan-based expression PCA; any solve would fabricate geometry against unrelated handles. Declared unsupported.",
+      "notes": null,
+      "ply": null
+    },
+    "cheekSquintLeft": {
+      "supported": false,
+      "status": "measured",
+      "method": "none",
+      "intended": "unsupported",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {},
+      "reason": "No cheek handles; the infraorbital bulge of cheek squint is not reliably spanned by FLAME PCA and would duplicate eyeSquintLeft dishonestly. Unsupported.",
+      "notes": null,
+      "ply": null
+    },
+    "cheekSquintRight": {
+      "supported": false,
+      "status": "measured",
+      "method": "none",
+      "intended": "unsupported",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {},
+      "reason": "Mirror of cheekSquintLeft. Unsupported.",
+      "notes": null,
+      "ply": null
+    },
+    "noseSneerLeft": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "weak",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.9827239467447849,
+        "amp_ratio": 0.7439435326979997,
+        "max_delta_m": 0.002951018570515878,
+        "solver": {
+          "lambda": 7.910436885163553e-07,
+          "lambda_escalations": 2,
+          "e_norm": 1.6943473038832655,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.8569678993104735,
+        "stabilizer_ratio": 0.44752917080447124
+      },
+      "reason": "mirror-side leakage 0.86 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Nostril-wing + upper-lip raise. Nose wrinkling is weakly represented in FLAME PCA and one-sidedness is dubious -- the leakage gate decides honestly.",
+      "ply": null
+    },
+    "noseSneerRight": {
+      "supported": false,
+      "status": "measured",
+      "method": "pca",
+      "intended": "weak",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {
+        "target_cos": 0.9827932668023209,
+        "amp_ratio": 0.7317069026663573,
+        "max_delta_m": 0.0028901559181856995,
+        "solver": {
+          "lambda": 8.168404575752119e-07,
+          "lambda_escalations": 2,
+          "e_norm": 1.6772548887652547,
+          "norm_clipped": false
+        },
+        "leak_ratio": 0.9053031575018382,
+        "stabilizer_ratio": 0.46574331387385726
+      },
+      "reason": "mirror-side leakage 0.91 > 0.6 (not one-sided in FLAME PCA)",
+      "notes": "Nostril-wing + upper-lip raise. Nose wrinkling is weakly represented in FLAME PCA and one-sidedness is dubious -- the leakage gate decides honestly.",
+      "ply": null
+    },
+    "tongueOut": {
+      "supported": false,
+      "status": "measured",
+      "method": "none",
+      "intended": "unsupported",
+      "max_delta_m": null,
+      "mean_delta_m": null,
+      "gates": {},
+      "reason": "FLAME 2023 has no tongue geometry; no expression axis or pose can produce it. Declared unsupported (flat, no mesh) -- matches out/arkit_51_52_map.json (MediaPipe never emits it).",
+      "notes": null,
+      "ply": null
+    }
+  }
+}

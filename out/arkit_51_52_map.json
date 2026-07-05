@@ -1,0 +1,461 @@
+{
+  "schema": "arkit-51-52-name-contract/1.0",
+  "generated_at_utc": "2026-07-04T14:19:31Z",
+  "generated_by": "metahuman-route (Track B2, Opus 4.8) \u2014 scaffold-only, no compute",
+  "purpose": "Case-sensitive ARKit name CONTRACT shared by the MetaHuman-baked GLB morph targets, the MediaPipe FaceLandmarker driver, and qa-verifier. Records the 51<->52 gap honestly; nothing is renamed to hide it.",
+  "sources_of_truth": {
+    "baked_51_from": "vendor/metahuman-to-glb/5.7/native-glb/skills/reference/arkit52_deltas.json (regions.head.keys)",
+    "baker": "vendor/metahuman-to-glb/5.7/native-glb/stages/02-blender-assemble/tools/import_glb.py (_bake_arkit_from_lse_fbx: camelCases MetaHuman PA_MetaHuman_ARKit_Mapping pose names, skips 'Default'/'Pose_*', KDTree-transfers each pose to the GLB face mesh)",
+    "driver": "vendor/metahuman-to-glb/5.7/native-glb/stages/04-webview-build/templates/viewer.js (setInfluence writes MediaPipe categoryName -> morphTargetInfluences by exact name; '_neutral' skipped; missing keys no-op)",
+    "apple_spec": "https://developer.apple.com/documentation/arkit/arfaceanchor/blendshapelocation",
+    "mediapipe_spec": "MediaPipe FaceLandmarker v2 blendshape model card (52 categories = _neutral + 51 ARKit; no tongueOut)"
+  },
+  "counts": {
+    "apple_canonical": 52,
+    "metahuman_baked": 51,
+    "mediapipe_emitted_arkit": 51,
+    "mediapipe_plus_neutral": 52
+  },
+  "the_two_distinct_facts": {
+    "count_gap_51_vs_52": {
+      "missing_name": "tongueOut",
+      "why": "The DEFAULT MetaHuman face rig does not produce a tongueOut pose (needs a non-default/tongue rig variant), so stage 02 bakes 51, not 52. This \u2014 not browInnerUp \u2014 is what accounts for the numeric 51-vs-52 gap."
+    },
+    "browInnerUp_fold": {
+      "folded_name": "browInnerUp",
+      "what": "MetaHuman's raw facial rig can drive left/right inner-brow raise independently, but AS_MetaHuman_ARKit_Mapping collapses them into the single Apple-standard 'browInnerUp'. Apple's ARKit-52 is ALSO a single 'browInnerUp', and MediaPipe emits a single 'browInnerUp' \u2014 so on the NAME contract this resolves 1:1 with no remap. The only loss is left/right inner-brow asymmetry (fidelity), NOT a missing/renamed name.",
+      "repo_refs": "README known gaps + issues #17/#18"
+    }
+  },
+  "apple_canonical_52": [
+    "eyeBlinkLeft",
+    "eyeLookDownLeft",
+    "eyeLookInLeft",
+    "eyeLookOutLeft",
+    "eyeLookUpLeft",
+    "eyeSquintLeft",
+    "eyeWideLeft",
+    "eyeBlinkRight",
+    "eyeLookDownRight",
+    "eyeLookInRight",
+    "eyeLookOutRight",
+    "eyeLookUpRight",
+    "eyeSquintRight",
+    "eyeWideRight",
+    "jawForward",
+    "jawLeft",
+    "jawRight",
+    "jawOpen",
+    "mouthClose",
+    "mouthFunnel",
+    "mouthPucker",
+    "mouthRight",
+    "mouthLeft",
+    "mouthSmileLeft",
+    "mouthSmileRight",
+    "mouthFrownLeft",
+    "mouthFrownRight",
+    "mouthDimpleLeft",
+    "mouthDimpleRight",
+    "mouthStretchLeft",
+    "mouthStretchRight",
+    "mouthRollLower",
+    "mouthRollUpper",
+    "mouthShrugLower",
+    "mouthShrugUpper",
+    "mouthPressLeft",
+    "mouthPressRight",
+    "mouthLowerDownLeft",
+    "mouthLowerDownRight",
+    "mouthUpperUpLeft",
+    "mouthUpperUpRight",
+    "browDownLeft",
+    "browDownRight",
+    "browInnerUp",
+    "browOuterUpLeft",
+    "browOuterUpRight",
+    "cheekPuff",
+    "cheekSquintLeft",
+    "cheekSquintRight",
+    "noseSneerLeft",
+    "noseSneerRight",
+    "tongueOut"
+  ],
+  "metahuman_baked_51": [
+    "eyeBlinkLeft",
+    "eyeLookDownLeft",
+    "eyeLookInLeft",
+    "eyeLookOutLeft",
+    "eyeLookUpLeft",
+    "eyeSquintLeft",
+    "eyeWideLeft",
+    "eyeBlinkRight",
+    "eyeLookDownRight",
+    "eyeLookInRight",
+    "eyeLookOutRight",
+    "eyeLookUpRight",
+    "eyeSquintRight",
+    "eyeWideRight",
+    "jawForward",
+    "jawLeft",
+    "jawRight",
+    "jawOpen",
+    "mouthClose",
+    "mouthFunnel",
+    "mouthPucker",
+    "mouthRight",
+    "mouthLeft",
+    "mouthSmileLeft",
+    "mouthSmileRight",
+    "mouthFrownLeft",
+    "mouthFrownRight",
+    "mouthDimpleLeft",
+    "mouthDimpleRight",
+    "mouthStretchLeft",
+    "mouthStretchRight",
+    "mouthRollLower",
+    "mouthRollUpper",
+    "mouthShrugLower",
+    "mouthShrugUpper",
+    "mouthPressLeft",
+    "mouthPressRight",
+    "mouthLowerDownLeft",
+    "mouthLowerDownRight",
+    "mouthUpperUpLeft",
+    "mouthUpperUpRight",
+    "browDownLeft",
+    "browDownRight",
+    "browInnerUp",
+    "browOuterUpLeft",
+    "browOuterUpRight",
+    "cheekPuff",
+    "cheekSquintLeft",
+    "cheekSquintRight",
+    "noseSneerLeft",
+    "noseSneerRight"
+  ],
+  "mediapipe_arkit_51": [
+    "eyeBlinkLeft",
+    "eyeLookDownLeft",
+    "eyeLookInLeft",
+    "eyeLookOutLeft",
+    "eyeLookUpLeft",
+    "eyeSquintLeft",
+    "eyeWideLeft",
+    "eyeBlinkRight",
+    "eyeLookDownRight",
+    "eyeLookInRight",
+    "eyeLookOutRight",
+    "eyeLookUpRight",
+    "eyeSquintRight",
+    "eyeWideRight",
+    "jawForward",
+    "jawLeft",
+    "jawRight",
+    "jawOpen",
+    "mouthClose",
+    "mouthFunnel",
+    "mouthPucker",
+    "mouthRight",
+    "mouthLeft",
+    "mouthSmileLeft",
+    "mouthSmileRight",
+    "mouthFrownLeft",
+    "mouthFrownRight",
+    "mouthDimpleLeft",
+    "mouthDimpleRight",
+    "mouthStretchLeft",
+    "mouthStretchRight",
+    "mouthRollLower",
+    "mouthRollUpper",
+    "mouthShrugLower",
+    "mouthShrugUpper",
+    "mouthPressLeft",
+    "mouthPressRight",
+    "mouthLowerDownLeft",
+    "mouthLowerDownRight",
+    "mouthUpperUpLeft",
+    "mouthUpperUpRight",
+    "browDownLeft",
+    "browDownRight",
+    "browInnerUp",
+    "browOuterUpLeft",
+    "browOuterUpRight",
+    "cheekPuff",
+    "cheekSquintLeft",
+    "cheekSquintRight",
+    "noseSneerLeft",
+    "noseSneerRight"
+  ],
+  "folded_name": "browInnerUp",
+  "unbaked_name": "tongueOut",
+  "driver_resolution": {
+    "eyeBlinkLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "eyeLookDownLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "eyeLookInLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "eyeLookOutLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "eyeLookUpLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "eyeSquintLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "eyeWideLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "eyeBlinkRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "eyeLookDownRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "eyeLookInRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "eyeLookOutRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "eyeLookUpRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "eyeSquintRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "eyeWideRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "jawForward": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "jawLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "jawRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "jawOpen": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthClose": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthFunnel": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthPucker": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthSmileLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthSmileRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthFrownLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthFrownRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthDimpleLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthDimpleRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthStretchLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthStretchRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthRollLower": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthRollUpper": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthShrugLower": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthShrugUpper": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthPressLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthPressRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthLowerDownLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthLowerDownRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthUpperUpLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "mouthUpperUpRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "browDownLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "browDownRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "browInnerUp": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match. The L/R fold is done UPSTREAM in MetaHuman's AS_MetaHuman_ARKit_Mapping; the driver never sees left/right inner-brow. Resolves cleanly, no remap."
+    },
+    "browOuterUpLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "browOuterUpRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "cheekPuff": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "cheekSquintLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "cheekSquintRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "noseSneerLeft": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "noseSneerRight": {
+      "in_glb_morphtargets": true,
+      "emitted_by_mediapipe": true,
+      "driver_action": "1:1 exact-name match, no remap."
+    },
+    "tongueOut": {
+      "in_glb_morphtargets": false,
+      "emitted_by_mediapipe": false,
+      "driver_action": "no-op (dict[key] is undefined -> setInfluence skips it); manual slider simply does not render. No rename, no crash."
+    }
+  },
+  "qa_assertions": [
+    "GLB face-mesh morphTargetDictionary MUST contain all 51 names in metahuman_baked_51, exact case.",
+    "GLB face-mesh morphTargetDictionary MUST NOT contain tongueOut (unless a tongue rig variant was used; then update this map to 52).",
+    "No ARKit name may be renamed/aliased to mask the gap (CLAUDE.md invariant 2).",
+    "Facial-groom card meshes (eyebrows/beard/mustache) MUST carry the SAME 51 shape-key names so the driver moves every mesh in lockstep.",
+    "browInnerUp present exactly once (single bilateral), not split into browInnerUpLeft/Right."
+  ]
+}

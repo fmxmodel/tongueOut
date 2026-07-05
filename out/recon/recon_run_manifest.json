@@ -1,0 +1,52 @@
+{
+  "schema": "b1-recon-run-manifest/1.0",
+  "generated_utc": "2026-07-05T10:30:39Z",
+  "neutral_ply": {
+    "n_vertices": 5023,
+    "n_faces": 9976,
+    "sha256": "f8f528a9b11b57d375173c0d7a1cad09982c39fc8966bcea42c16ce0e52ec325"
+  },
+  "topology_contract": {
+    "n_vertices_measured": 5023,
+    "n_faces_measured": 9976,
+    "expected_doc": {
+      "n_vertices": 5023,
+      "n_faces": 9976
+    },
+    "matches_expected_doc": true,
+    "faces_npy_sha256": "1b1b64fb4ce740663be794c1c4b88b7eb2ec714758fb8fe5a5ad8a0388567435",
+    "dtype": "int32"
+  },
+  "id_params": {
+    "n_betas": 300,
+    "landmark_rmse_px": 15.159517247490966
+  },
+  "expression_basis": {
+    "n_expr": 100,
+    "n_pose_correctives": 36
+  },
+  "landmark_embedding": {
+    "source": "self-authored-geometric/2.1 (recon/flame_landmarks.py, clean-room)",
+    "self_authored": true,
+    "sha256": "3eadf4098ab2f95a17505a6a0ecd1fcb870ce755831e91b63e5b31ae266a814e"
+  },
+  "albedo": {
+    "tex_res": 1024,
+    "texels_covered": 646263,
+    "texels_direct": 153273,
+    "texels_mirror": 63444,
+    "texels_inpaint": 429546,
+    "winding_facing_sign": "dot<0",
+    "uv_source": "generated-clean-room:xatlas/0.0.11 (MIT) from flame2023.pkl v_template+f; deterministic default options",
+    "no_statistical_albedo_prior": true,
+    "note_shaded_appearance": "Baked map is the photo's SHADED appearance (delighting priors are license-barred); recorded for QA.",
+    "runtime_s": 8.602145671844482
+  },
+  "uv": {
+    "source": "generated-clean-room:xatlas/0.0.11 (MIT) from flame2023.pkl v_template+f; deterministic default options",
+    "generated_clean_room": true,
+    "n_uv_verts": 6610
+  },
+  "failures": [],
+  "verdict": "PASS"
+}

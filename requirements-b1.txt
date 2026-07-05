@@ -1,0 +1,58 @@
+# ============================================================================
+# requirements-b1.txt  —  Track B1 (FLAME 2023 Open, COMMERCIAL) pod deps
+# ----------------------------------------------------------------------------
+# Authored on the CPU-only authoring box; INSTALLED ONLY ON THE GPU POD
+# (Linux, RTX 6000 Ada / sm_89) by scripts/pod_setup_b1.sh. Nothing here is
+# installed or run locally (contamination guard).
+#
+# torch / torchvision / pytorch3d are NOT listed here — they are ABI-coupled to
+# a specific CUDA build and are installed by pod_setup_b1.sh from the PyTorch
+# CUDA index + the pytorch3d wheel/source path. See that script.
+#
+# LICENSE AUDIT (all must be commercially permissive for a COMMERCIAL run):
+#   mediapipe        Apache-2.0        OK   (FaceLandmarker 478 lmks + 52 ARKit blendshapes)
+#   numpy            BSD-3-Clause      OK
+#   scipy            BSD-3-Clause      OK   (sparse solves / inpainting helpers)
+#   trimesh          MIT               OK   (mesh + OBJ/PLY/GLB I/O, UV handling)
+#   opencv-python    Apache-2.0*       OK   (cv2.inpaint = CLASSICAL inpainting; no NC prior)
+#   Pillow           HPND (MIT-like)   OK
+#   imageio          BSD-2-Clause      OK
+#   scikit-image     BSD-3-Clause      OK   (optional: alt classical inpaint / morphology)
+#   fvcore           Apache-2.0        OK   (pytorch3d runtime dep)
+#   iopath           MIT               OK   (pytorch3d runtime dep)
+#   ninja            Apache-2.0        OK   (fast pytorch3d source build)
+#   xatlas           MIT               OK   (clean-room UV unwrap of the FLAME
+#                                           template -- the 2023 Open release is
+#                                           pkl-only and ships NO UV; both the
+#                                           PyPI binding and the bundled xatlas
+#                                           C++ library are MIT)
+#   * opencv-python packaging is MIT; the OpenCV library is Apache-2.0 (>=4.x).
+# NONE of the above is non-commercial. Verified 2026-07-04 (xatlas added 2026-07-05).
+# NOTE the deliberate ABSENCES (barred / not needed for the B1 method):
+#   - NO deca / emoca / face-alignment-with-NC-weights, NO insightface / arcface
+#   - NO basel BFM, NO albedomm, NO FLAME_albedo_from_BFM (no statistical albedo)
+#   - NO nvdiffrast (NVIDIA Source Code License = NON-COMMERCIAL -> BARRED)
+#   - NO 3D Gaussian Splatting stack
+# ============================================================================
+
+# --- MediaPipe FaceLandmarker (2D/3D landmarks for the optimization fit) ---
+mediapipe==0.10.14
+
+# --- numeric / mesh / imaging core ---
+# numpy pinned <2 for mediapipe 0.10.x compatibility (it links against the
+# numpy-1.x C-ABI). Recorded reason: mediapipe wheel constraint, not preference.
+numpy<2
+scipy
+trimesh
+opencv-python
+Pillow
+imageio
+scikit-image
+
+# --- clean-room UV generation (FLAME 2023 Open is pkl-only: no UV shipped) ---
+xatlas
+
+# --- pytorch3d build/runtime helpers (pulled anyway, pinned here for clarity) ---
+fvcore
+iopath
+ninja
