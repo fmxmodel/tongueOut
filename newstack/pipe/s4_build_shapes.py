@@ -13,6 +13,9 @@ ONE summed delta when ICT ships them split; non-ARKit extras are dropped and
 listed; `tongueOut` (no ICT blendshape OBJ) is SYNTHESIZED from ICT's real
 static tongue geometry (tongue_synth.py) -- 52/52, gated: the delta must be
 exactly zero outside the tongue set AND push the tongue tip past the lips.
+The eight `eyeLook*` shapes are AUGMENTED with synthesized eyeball rotations
+(gaze_synth.py) because ICT's OBJs move only the lids (measured: eyeball
+delta exactly 0) -- without this the iris would never follow gaze morphs.
 
 Outputs under out/rig/:
   arkit_deltas.npz     names (S,), deltas (S,N,3) f32, refined/generic neutral,
@@ -33,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from arkit_names import (ARKIT_52, SYNTHESIZED_SOURCES,  # noqa: E402
                          UNSUPPORTED_REASON, resolve_sources)
 from common import N_VERTS, P, assert_topology, die, out_dir, save_json  # noqa: E402
+from gaze_synth import EYEBALL, synth_gaze_delta  # noqa: E402
 from ict_loader import get_cache  # noqa: E402
 from mp_ibug68 import IBUG_MOUTH  # noqa: E402
 from tongue_synth import synth_tongue_out_delta  # noqa: E402
@@ -161,6 +165,36 @@ def main():
               f"max|d|={mx:6.3f} cm{fold}")
         manifest_shapes[name] = {"supported": True, "sources": sources,
                                  "max_delta_cm": round(mx, 4)}
+
+    # ---- eyeLook*: ICT's OBJs move the LIDS only (MEASURED: eyeball-range
+    # delta exactly 0.0 for all eight), so a gaze morph would never move the
+    # iris. Augment each with a synthesized eyeball rotation (gaze_synth.py);
+    # the ICT lid motion is kept, the rotation is added on top.
+    eb_all = slice(EYEBALL["Left"][0], EYEBALL["Right"][1])
+    for name in [n for n in sup_names if n.startswith("eyeLook")]:
+        i = sup_names.index(name)
+        d64 = sup_deltas[i].astype(np.float64)
+        pre = float(np.abs(d64[eb_all]).max())
+        if pre > 1e-4:
+            print(f"[s4 WARN] {name}: ICT source already moves the eyeballs "
+                  f"(max {pre:.4f} cm) -- skipping gaze synth to avoid "
+                  "double rotation")
+            continue
+        add, st = synth_gaze_delta(name, neutral, return_stats=True)
+        outside = np.ones(N_VERTS, dtype=bool)
+        outside[st["vertex_range"][0]:st["vertex_range"][1]] = False
+        if add[outside].any():
+            die(f"{name}: gaze delta leaked outside the eyeball range")
+        d64 += add
+        sup_deltas[i] = d64.astype(np.float32)
+        mx = float(np.linalg.norm(d64, axis=1).max())
+        manifest_shapes[name]["max_delta_cm"] = round(mx, 4)
+        manifest_shapes[name]["synth_gaze"] = st
+        manifest_shapes[name]["sources"] = (
+            manifest_shapes[name]["sources"] + ["synth-eyeball-rotation"])
+        print(f"[s4]   {name:22s} += eyeball rotation "
+              f"{st['angle_deg']:.0f} deg ({st['side'].lower()} eye, pole "
+              f"moved {st['pole_moved_cm']:.2f} cm)")
 
     n_sup = len(sup_names)
     print(f"[s4] supported {n_sup}/52; unsupported: "
