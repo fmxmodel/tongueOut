@@ -10,7 +10,9 @@ of the same topology:
 Names follow the exact ARKit-52 contract (arkit_names.py): `_L/_R` becomes
 `Left/Right`; bilateral singles (browInnerUp, cheekPuff) fold `_L + _R` into
 ONE summed delta when ICT ships them split; non-ARKit extras are dropped and
-listed; `tongueOut` is declared unsupported (ICT has no tongue) -- 51/52.
+listed; `tongueOut` (no ICT blendshape OBJ) is SYNTHESIZED from ICT's real
+static tongue geometry (tongue_synth.py) -- 52/52, gated: the delta must be
+exactly zero outside the tongue set AND push the tongue tip past the lips.
 
 Outputs under out/rig/:
   arkit_deltas.npz     names (S,), deltas (S,N,3) f32, refined/generic neutral,
@@ -28,12 +30,67 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from arkit_names import ARKIT_52, UNSUPPORTED_REASON, resolve_sources  # noqa: E402
+from arkit_names import (ARKIT_52, SYNTHESIZED_SOURCES,  # noqa: E402
+                         UNSUPPORTED_REASON, resolve_sources)
 from common import N_VERTS, P, assert_topology, die, out_dir, save_json  # noqa: E402
 from ict_loader import get_cache  # noqa: E402
+from mp_ibug68 import IBUG_MOUTH  # noqa: E402
+from tongue_synth import synth_tongue_out_delta  # noqa: E402
 
 FAIL_DELTA_CM = 1e-4   # an all-zero delta means the source axis was wrong
 WARN_DELTA_CM = 0.05
+
+
+def build_synthesized_shape(name, tag, neutral, lmk_verts):
+    """Build + GATE a synthesized shape (currently only tongueOut).
+    Returns (delta float64 (N,3), manifest_entry). Dies loudly on any gate
+    failure -- a silently-wrong tongue would break the 52/52 contract."""
+    if name != "tongueOut":
+        die(f"no synthesizer implemented for {name} (tagged {tag})")
+    delta, st = synth_tongue_out_delta(neutral, return_stats=True)
+    if not st["available"] or st["n_selected"] == 0:
+        die(f"{name}: tongue synthesis unavailable on this neutral -- "
+            "cannot ship 52/52. NOT fabricating a shape.")
+
+    # Gate 1: EXACTLY zero displacement outside the selected tongue set
+    # (gums, teeth, face, eyes -- everything).
+    outside = np.ones(N_VERTS, dtype=bool)
+    outside[st["indices"]] = False
+    if delta[outside].any():
+        die(f"{name}: synthesized delta leaked outside the tongue set "
+            f"({int(np.count_nonzero(np.abs(delta[outside]).sum(axis=1)))} "
+            "non-tongue verts moved)")
+
+    # Gate 2: the tongue tip must end up FORWARD of the lips. Lip-front z is
+    # measured on THIS neutral via the Multi-PIE/iBUG mouth landmark verts
+    # (48-67), not hardcoded.
+    lip_front_z = float(neutral[np.asarray(lmk_verts)[IBUG_MOUTH], 2].max())
+    tip_final_z = float(st["tip_final_z"])
+    if tip_final_z <= lip_front_z:
+        die(f"{name}: tongue tip final z {tip_final_z:.2f} cm does not pass "
+            f"lip-front z {lip_front_z:.2f} cm -- raise tongue_synth.AMOUNT_Z_CM")
+
+    mx = float(np.linalg.norm(delta, axis=1).max())
+    if mx < FAIL_DELTA_CM:
+        die(f"{name}: synthesized max|delta|={mx:.2e} cm -- effectively zero")
+
+    print(f"[s4]   {name:22s} <- {tag:28s} max|d|={mx:6.3f} cm  "
+          f"(synth: {st['n_selected']} tongue verts, tip z "
+          f"{st['z_tip']:.2f}->{tip_final_z:.2f} > lips {lip_front_z:.2f})")
+    entry = {"supported": True, "sources": [tag],
+             "max_delta_cm": round(mx, 4),
+             "synth": {"n_tongue_verts": st["n_selected"],
+                       "n_region_verts": st["n_region"],
+                       "centroid_cm": st["centroid"],
+                       "z_root": round(st["z_root"], 3),
+                       "z_tip": round(st["z_tip"], 3),
+                       "tip_final_z": round(tip_final_z, 3),
+                       "lip_front_z": round(lip_front_z, 3),
+                       "tooth_clearance_cm": st["clearance_cm"],
+                       "amount_z_cm": st["amount_z_cm"],
+                       "amount_y_cm": st["amount_y_cm"],
+                       "weight_power": st["weight_power"]}}
+    return delta, entry
 
 
 def main():
@@ -74,6 +131,13 @@ def main():
     manifest_shapes = {}
     for name in ARKIT_52:
         sources = mapping[name]
+        if not sources and name in SYNTHESIZED_SOURCES:
+            delta, entry = build_synthesized_shape(
+                name, SYNTHESIZED_SOURCES[name], neutral, z["lmk_verts"])
+            sup_names.append(name)
+            sup_deltas.append(delta.astype(np.float32))
+            manifest_shapes[name] = entry
+            continue
         if not sources:
             reason = UNSUPPORTED_REASON.get(
                 name, "no ICT-FaceKit source OBJ found for this ARKit shape")
@@ -100,7 +164,8 @@ def main():
 
     n_sup = len(sup_names)
     print(f"[s4] supported {n_sup}/52; unsupported: "
-          + ", ".join(n for n in ARKIT_52 if not manifest_shapes[n]["supported"]))
+          + (", ".join(n for n in ARKIT_52
+                       if not manifest_shapes[n]["supported"]) or "none"))
     if n_sup < 45:
         die(f"only {n_sup} supported shapes -- ICT install looks broken")
 

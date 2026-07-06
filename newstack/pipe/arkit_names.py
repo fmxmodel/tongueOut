@@ -8,8 +8,10 @@ ICT-FaceKit ships its expressions as per-file OBJs named with `_L`/`_R`
 suffixes (following ARKit semantics: `_L` = subject's left). Two ARKit names
 are bilateral singles that ICT may ship split (browInnerUp, cheekPuff) --
 for those we try the single file first, else fold `_L + _R` as a SUMMED
-delta. `tongueOut` has no ICT source (no tongue blendshape) and is honestly
-declared unsupported.
+delta. `tongueOut` has no ICT blendshape OBJ, but ICT DOES have real static
+tongue geometry, so its delta is SYNTHESIZED numerically from that geometry
+(tongue_synth.py) and shipped with source "synthesized-ict-tongue" -- 52/52
+supported.
 
 Resolution is data-driven and glob-tolerant: whatever OBJs actually exist in
 FaceXModel/ get consumed if mapped, reported if dropped (e.g. pupilDilate_*,
@@ -66,7 +68,9 @@ for _s in ["jawForward", "jawLeft", "jawOpen", "jawRight", "mouthClose",
     ICT_SOURCE_CANDIDATES.update(_single(_s))
 ICT_SOURCE_CANDIDATES.update(_bilateral_foldable("browInnerUp"))
 ICT_SOURCE_CANDIDATES.update(_bilateral_foldable("cheekPuff"))
-ICT_SOURCE_CANDIDATES["tongueOut"] = []  # honestly unsupported: ICT has no tongue blendshape
+# tongueOut: no ICT blendshape OBJ exists, so no OBJ candidates -- the delta
+# is synthesized from ICT's static tongue geometry instead (SYNTHESIZED_SOURCES).
+ICT_SOURCE_CANDIDATES["tongueOut"] = []
 
 assert set(ICT_SOURCE_CANDIDATES) == set(ARKIT_52), (
     "source table must cover exactly the ARKit-52: missing="
@@ -74,9 +78,16 @@ assert set(ICT_SOURCE_CANDIDATES) == set(ARKIT_52), (
     + " extra=" + str(set(ICT_SOURCE_CANDIDATES) - set(ARKIT_52))
 )
 
-UNSUPPORTED_REASON = {
-    "tongueOut": "ICT-FaceKit has no tongue geometry/blendshape; declared unsupported, not fabricated",
-}
+# ARKit names with no ICT OBJ source whose deltas are SYNTHESIZED numerically
+# instead of resolved from expression OBJs. tongueOut is built by
+# tongue_synth.synth_tongue_out_delta from ICT's real static tongue geometry
+# (the "Gums and tongue" vertex region) -- supported, not fabricated from thin
+# air, and gated in s4 (tip must pass the lips; zero delta off the tongue).
+SYNTHESIZED_SOURCES = {"tongueOut": "synthesized-ict-tongue"}
+
+# Currently empty: all 52 names have a source (51 ICT OBJs + 1 synthesized).
+# Kept so s4 stays honest if a future topology loses a source.
+UNSUPPORTED_REASON = {}
 
 
 def resolve_sources(available_stems):

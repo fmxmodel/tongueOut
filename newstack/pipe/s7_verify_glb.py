@@ -3,7 +3,7 @@
 
 Parses the GLB binary header + JSON chunk directly (no deps) and checks:
   - valid glTF 2.0 container, exactly one mesh/primitive
-  - morph target COUNT == manifest's supported count (51 expected)
+  - morph target COUNT == manifest's supported count (52 expected)
   - morph target NAMES (mesh extras.targetNames) == manifest supported set,
     exact spelling -- the ARKit contract the whole pipeline exists to honor
   - every target's POSITION accessor count == base POSITION count

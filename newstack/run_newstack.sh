@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # =============================================================================
 # newstack fusion pipeline: single photo -> commercial GLB (ICT Light, MIT)
-# with hair volume (TripoSR clay), photo texture, ARKit-51 morph targets
-# (tongueOut honestly unsupported).
+# with hair volume (TripoSR clay), photo texture, ARKit-52 morph targets
+# (51 from ICT expression OBJs + tongueOut synthesized from ICT's real
+# static tongue geometry -- see pipe/tongue_synth.py).
 #
 # Pod layout (defaults; override via env):
 #   pipe scripts   /workspace/newstack/pipe
