@@ -9,6 +9,26 @@ the mesh is built with from_pydata straight from out/rig/arkit_deltas.npz
 additive ARKit deltas, the baked albedo is wired to a Principled BSDF, and the
 scene exports as GLB with morph targets named EXACTLY per the ARKit contract.
 
+MATERIALS: the eyeball polygons (verts in ICT_REGIONS["eyeballs"]) get their
+own eye material(s) bound to s5's dedicated eye texture(s) -- eye_left.png
+for the x<0 eyeball, eye_right.png for x>=0 when present, otherwise one
+shared EyeMat (the file contract: eye_right.png existing == separate irises).
+Everything else stays on HeadMat. Multiple materials => the exporter splits
+the mesh into multiple primitives; morph targets are exported on ALL of them
+and extras.targetNames stays mesh-level, so the ARKit name contract holds.
+
+OPAQUE HARDENING (kills the see-through-head viewer artifact): every material
+is single-sided (use_backface_culling=True -> glTF doubleSided=false; the head
+and eyeballs are closed meshes) and the exported GLB's JSON is post-processed
+to carry an EXPLICIT "alphaMode": "OPAQUE" on every material. After export the
+GLB is re-imported into a fresh scene and each material is MEASURED for
+functional opacity (alpha socket unlinked & 1.0, surface_render_method
+DITHERED / blend_method not BLEND, backface culling on). NOTE (measured on
+Blender 4.2.3): Material.blend_method is a deprecated alias there -- even a
+factory-new material reads 'HASHED' and assigning 'OPAQUE' does not stick, so
+the check treats 'HASHED'+alpha==1.0+DITHERED as opaque (which it renders as)
+and FAILS on 'BLEND'/'BLENDED'/linked-alpha.
+
 Axes/units: Blender coords = (x, -z, y) of ICT * 0.01. The glTF exporter's
 Z-up -> Y-up conversion is (x, z, -y), so GLB coords == ICT coords in meters:
 +Y up, +Z front, exactly what three.js expects.
@@ -26,11 +46,112 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import N_VERTS, P, faces_as_lists, out_dir  # noqa: E402
+from common import ICT_REGIONS, N_VERTS, P, faces_as_lists, out_dir  # noqa: E402
 
 import bpy  # noqa: E402
 
 CM_TO_M = 0.01
+
+
+def make_opaque_tex_material(name, img_path, roughness):
+    """Textured Principled material hardened for opaque single-sided export."""
+    mat = bpy.data.materials.new(name)
+    mat.use_nodes = True
+    bsdf = mat.node_tree.nodes["Principled BSDF"]
+    bsdf.inputs["Roughness"].default_value = roughness
+    bsdf.inputs["Alpha"].default_value = 1.0
+    if img_path is not None and Path(img_path).is_file():
+        img = bpy.data.images.load(str(img_path))
+        img.alpha_mode = "NONE"  # never wire texture alpha into the shader
+        img.pack()
+        tex = mat.node_tree.nodes.new("ShaderNodeTexImage")
+        tex.image = img
+        mat.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    else:
+        print(f"[s6 WARN] {img_path} missing -- {name} exports untextured")
+    mat.use_backface_culling = True  # -> glTF doubleSided=false
+    for attr, val in (("blend_method", "OPAQUE"),
+                      ("surface_render_method", "DITHERED"),
+                      ("show_transparent_back", False)):
+        try:
+            setattr(mat, attr, val)
+        except (AttributeError, TypeError):
+            pass  # property renamed/removed across Blender versions
+    return mat
+
+
+def harden_glb_opaque(glb_path):
+    """Rewrite the GLB's JSON chunk in place: every material gets an EXPLICIT
+    alphaMode OPAQUE and doubleSided false. stdlib-only, 4-byte aligned."""
+    import struct
+    data = Path(glb_path).read_bytes()
+    magic, version, _ = struct.unpack_from("<III", data, 0)
+    assert magic == 0x46546C67 and version == 2, "not a GLB v2"
+    clen, ctype = struct.unpack_from("<II", data, 12)
+    assert ctype == 0x4E4F534A, "first chunk is not JSON"
+    gltf = json.loads(data[20:20 + clen])
+    changed = []
+    for m in gltf.get("materials", []):
+        if m.get("alphaMode") != "OPAQUE":
+            m["alphaMode"] = "OPAQUE"
+            changed.append(m.get("name", "?"))
+        if m.get("doubleSided"):
+            m["doubleSided"] = False
+            changed.append(m.get("name", "?") + ":doubleSided")
+    payload = json.dumps(gltf, separators=(",", ":")).encode("utf-8")
+    payload += b" " * (-len(payload) % 4)  # spaces pad JSON chunks (spec)
+    rest = data[20 + clen:]  # BIN chunk(s), already aligned
+    out = bytearray()
+    out += struct.pack("<III", magic, version, 12 + 8 + len(payload) + len(rest))
+    out += struct.pack("<II", len(payload), ctype) + payload + rest
+    Path(glb_path).write_bytes(bytes(out))
+    print(f"[s6] GLB hardened opaque (explicit alphaMode) -- touched: "
+          f"{changed or 'nothing (already explicit)'}")
+    return gltf
+
+
+def reimport_opacity_check(glb_path):
+    """Round-trip proof: import the GLB into a FRESH scene and measure that
+    every material lands functionally opaque. Returns (ok, per-material list).
+
+    Functional opacity = Principled Alpha unlinked and == 1.0, render method
+    not BLENDED/BLEND, backface culling on (doubleSided=false round-tripped).
+    On Blender 4.2 blend_method is a deprecated alias that reads 'HASHED' for
+    ALL materials (measured: even factory-new ones; setting 'OPAQUE' does not
+    stick), so 'HASHED' with alpha==1.0 is opaque there; 'BLEND' is a FAIL.
+    """
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    bpy.ops.import_scene.gltf(filepath=str(glb_path))
+    results, ok = [], True
+    for m in bpy.data.materials:
+        alpha_ok = True
+        if m.use_nodes:
+            for n in m.node_tree.nodes:
+                if n.type == "BSDF_PRINCIPLED":
+                    a = n.inputs["Alpha"]
+                    alpha_ok &= (not a.is_linked
+                                 and abs(a.default_value - 1.0) < 1e-6)
+        entry = {
+            "material": m.name,
+            "blend_method": getattr(m, "blend_method", None),
+            "surface_render_method": getattr(m, "surface_render_method", None),
+            "backface_culling": bool(m.use_backface_culling),
+            "alpha_unlinked_and_1": bool(alpha_ok),
+            "show_transparent_back": getattr(m, "show_transparent_back", None),
+        }
+        entry["opaque"] = bool(
+            alpha_ok
+            and entry["blend_method"] != "BLEND"
+            and entry["surface_render_method"] in (None, "DITHERED")
+            and entry["backface_culling"])
+        ok &= entry["opaque"]
+        results.append(entry)
+        print(f"[s6] reimport-check {m.name}: blend_method="
+              f"{entry['blend_method']} surface_render_method="
+              f"{entry['surface_render_method']} alpha_1={alpha_ok} "
+              f"backface_culling={entry['backface_culling']} -> "
+              f"{'OPAQUE' if entry['opaque'] else 'NOT OPAQUE'}")
+    return ok, results
 
 
 def parse_args():
@@ -104,21 +225,51 @@ def main():
     assert got == names, f"shape key name drift: {set(names) ^ set(got)}"
     print(f"[s6] shape keys created: {len(got)} (+Basis)")
 
-    # ---- material: baked albedo -> Principled BSDF
-    albedo = Path(args.out) / "tex" / "albedo.png"
-    mat = bpy.data.materials.new("HeadMat")
-    mat.use_nodes = True
-    bsdf = mat.node_tree.nodes["Principled BSDF"]
-    bsdf.inputs["Roughness"].default_value = 0.6
-    if albedo.is_file():
-        img = bpy.data.images.load(str(albedo))
-        img.pack()
-        tex = mat.node_tree.nodes.new("ShaderNodeTexImage")
-        tex.image = img
-        mat.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+    # ---- materials: HeadMat (baked albedo) + dedicated eye material(s)
+    tex_dir = Path(args.out) / "tex"
+    albedo = tex_dir / "albedo.png"
+    obj.data.materials.append(make_opaque_tex_material("HeadMat", albedo, 0.6))
+
+    eye_l_png = tex_dir / "eye_left.png"
+    eye_r_png = tex_dir / "eye_right.png"
+    mat_names = ["HeadMat"]
+    if eye_l_png.is_file():
+        # per-polygon eyeball membership from the region vertex range
+        eb0, eb1 = ICT_REGIONS["eyeballs"]
+        inr = ((faces_flat >= eb0) & (faces_flat < eb1)).astype(np.uint8)
+        seg = faces_off[:-1]
+        all_in = np.minimum.reduceat(inr, seg).astype(bool)
+        any_in = np.maximum.reduceat(inr, seg).astype(bool)
+        assert (all_in == any_in).all(), \
+            "polygons straddling the eyeball vertex range -- region drift, STOP"
+        counts = np.diff(faces_off)
+        meanx = np.add.reduceat(neutral[faces_flat, 0], seg) / counts
+        mat_idx = np.zeros(len(counts), dtype=np.int32)
+        shared_eye = not eye_r_png.is_file()  # s5's file contract
+        if shared_eye:
+            obj.data.materials.append(
+                make_opaque_tex_material("EyeMat", eye_l_png, 0.35))
+            mat_names.append("EyeMat")
+            mat_idx[all_in] = 1
+        else:
+            obj.data.materials.append(
+                make_opaque_tex_material("EyeL", eye_l_png, 0.35))
+            obj.data.materials.append(
+                make_opaque_tex_material("EyeR", eye_r_png, 0.35))
+            mat_names += ["EyeL", "EyeR"]
+            mat_idx[all_in & (meanx < 0)] = 1
+            mat_idx[all_in & (meanx >= 0)] = 2
+        mesh.polygons.foreach_set("material_index", mat_idx)
+        mesh.update()
+        n_eye = int(all_in.sum())
+        print(f"[s6] eye material(s) {mat_names[1:]} on {n_eye} polys "
+              f"(x<0: {int((all_in & (meanx < 0)).sum())}, "
+              f"x>=0: {int((all_in & (meanx >= 0)).sum())}); "
+              f"HeadMat keeps {int(len(counts)) - n_eye}")
+        assert n_eye > 0, "no eyeball polygons found -- region drift, STOP"
     else:
-        print(f"[s6 WARN] {albedo} missing -- exporting untextured")
-    obj.data.materials.append(mat)
+        print("[s6 WARN] out/tex/eye_left.png missing -- eyes stay on HeadMat "
+              "(flat sclera); run s5 first for real irises")
 
     glb_path = od / f"{args.name}.glb"
     export_kwargs = dict(
@@ -138,17 +289,33 @@ def main():
                                   export_morph=True)
     print(f"[s6] GLB -> {glb_path} ({glb_path.stat().st_size/1e6:.1f} MB)")
 
+    # explicit alphaMode OPAQUE + doubleSided false, measured in the file
+    gltf_json = harden_glb_opaque(glb_path)
+    for m in gltf_json.get("materials", []):
+        assert m.get("alphaMode") == "OPAQUE" and not m.get("doubleSided"), \
+            f"material {m.get('name')} not hardened opaque -- STOP"
+
     blend_path = od / f"{args.name}.blend"
     bpy.ops.wm.save_as_mainfile(filepath=str(blend_path), compress=True)
     print(f"[s6] assembly blend -> {blend_path}")
+
+    # round-trip proof (AFTER the .blend is saved -- this wipes the scene)
+    reimport_ok, reimport_results = reimport_opacity_check(glb_path)
 
     with open(od / "export_info.json", "w", encoding="utf-8") as f:
         json.dump({"glb": str(glb_path), "blend": str(blend_path),
                    "n_verts": N_VERTS, "n_polys": int(len(faces_off) - 1),
                    "morph_targets": names, "draco": bool(args.draco),
                    "textured": albedo.is_file(),
-                   "units": "meters, +Y up, +Z front (glTF standard)"}, f, indent=2)
+                   "materials": mat_names,
+                   "reimport_opaque": {"pass": reimport_ok,
+                                       "materials": reimport_results},
+                   "units": "meters, +Y up, +Z front (glTF standard)"},
+                  f, indent=2)
     print(f"[s6] DONE in {time.time()-t0:.1f}s")
+    if not reimport_ok:
+        print("[s6 FATAL] reimported GLB is NOT opaque -- see export_info.json")
+        sys.exit(1)
 
 
 main()

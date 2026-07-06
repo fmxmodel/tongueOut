@@ -20,6 +20,12 @@ One diffuse map, no statistical/NC albedo prior:
   INTERIOR teeth/eyeballs/mouth-socket texels that the photo cannot see get
           honest flat defaults (ivory / sclera / dark mouth) instead of
           projection garbage that would show when jawOpen plays.
+  EYES    the eyeball UV islands overlap the face UVs (they span the whole
+          atlas), so eyeballs CANNOT live on the shared albedo -- they get
+          dedicated textures: out/tex/eye_left.png (+ eye_right.png when the
+          measured L/R iris colors differ), built photo-derived by
+          eye_texture.py with the iris disc at UV (0.5,0.5) = the eyeball's
+          forward pole. s6 binds them via separate eye material(s).
 
 Reads out/rig/arkit_deltas.npz (single source of export geometry + UVs),
 out/fit/camera.json + expression_offset.npy, out/landmarks/input_image.png,
@@ -69,6 +75,11 @@ def main():
     ap.add_argument("--match-clay-color", action="store_true",
                     help="gain-match clay fill to photo skin tone (off: TripoSR "
                          "colors already come from the same photo)")
+    ap.add_argument("--eye-size", type=int, default=512,
+                    help="eye texture resolution (px)")
+    ap.add_argument("--iris-frac", type=float, default=None,
+                    help="visible-iris radius as a fraction of the eyeball's "
+                         "full UV radius (default: eye_texture.IRIS_FRAC)")
     args = ap.parse_args()
     t0 = time.time()
     od = out_dir(args.out, "tex")
@@ -287,6 +298,49 @@ def main():
     img8 = np.clip(imgf, 0, 255).astype(np.uint8)
 
     Image.fromarray(img8).save(od / "albedo.png")
+
+    # ---- dedicated eye textures (eyeball UVs overlap the face UVs, so the
+    # eyes cannot share the albedo -- see eye_texture.py). Pairing of the
+    # model's x<0 / x>=0 eyeball to the photo's two irises is MEASURED by
+    # projecting the eyeball centroids through the fitted camera.
+    from eye_texture import IRIS, IRIS_FRAC, build_eye_textures
+    eb0, eb1 = ICT_REGIONS["eyeballs"]
+    eyeballs = expressed[eb0:eb1]
+    cen = np.stack([eyeballs[eyeballs[:, 0] < 0].mean(0),
+                    eyeballs[eyeballs[:, 0] >= 0].mean(0)])  # [x<0, x>=0]
+    uv_eyes, _ = project_weak_persp(cen, s, R, t2)
+    lmk_npz = Path(args.out) / "landmarks" / "landmarks.npz"
+    lmk = np.load(lmk_npz)
+    iris_px = {side: lmk["lmk478_px"][IRIS[side]["center"]] for side in IRIS}
+    d_xneg = {side: float(np.linalg.norm(uv_eyes[0] - iris_px[side]))
+              for side in IRIS}
+    d_xpos = {side: float(np.linalg.norm(uv_eyes[1] - iris_px[side]))
+              for side in IRIS}
+    left_side = min(d_xneg, key=d_xneg.get)
+    if min(d_xpos, key=d_xpos.get) == left_side:  # degenerate pairing
+        print("[s5 WARN] eyeball<->iris pairing degenerate; defaulting "
+              "x<0 -> subject_right (frontal-photo convention)")
+        left_side = "subject_right"
+    iris_frac = IRIS_FRAC if args.iris_frac is None else args.iris_frac
+    img_l, img_r, eye_metrics = build_eye_textures(
+        photo, lmk_npz, size=args.eye_size,
+        left_subject_side=left_side, iris_frac=iris_frac)
+    Image.fromarray(img_l).save(od / "eye_left.png")
+    eye_right = od / "eye_right.png"
+    if eye_metrics["shared"]:
+        eye_right.unlink(missing_ok=True)  # stale separate texture = drift
+    else:
+        Image.fromarray(img_r).save(eye_right)
+    eye_metrics["pairing"] = {
+        "model_xneg_feeds": left_side,
+        "proj_px": {"xneg": uv_eyes[0].round(1).tolist(),
+                    "xpos": uv_eyes[1].round(1).tolist()},
+        "dist_px_xneg": d_xneg, "dist_px_xpos": d_xpos,
+    }
+    print(f"[s5] eye textures -> eye_left.png"
+          f"{'' if eye_metrics['shared'] else ' + eye_right.png'} "
+          f"(shared={eye_metrics['shared']}, model x<0 iris from {left_side}, "
+          f"iris_uv_radius={eye_metrics['iris_uv_radius']:.3f})")
     wmap = np.zeros((T, T))
     wmap[covered] = w_photo
     Image.fromarray((wmap * 255).astype(np.uint8)).save(od / "debug_w_photo.png")
@@ -316,6 +370,7 @@ def main():
         "central_face": cf,
         "sanity_pass": sanity_pass,
         "expression_applied": not args.no_expression,
+        "eyes": eye_metrics,
     })
     print(f"[s5] albedo -> {od / 'albedo.png'}")
     print(f"[s5] DONE in {time.time()-t0:.1f}s")

@@ -20,6 +20,7 @@
 #
 # Stages: 1 landmarks | 2 identity fit | 3 clay align + shrinkwrap refine
 #         4 ARKit shapes | 5 texture bake | 6 Blender GLB export | 7 verify
+#         8 render proof images from the GLB (front/back/eye close-ups)
 # Every stage is independently rerunnable; artifacts live under $OUT/<stage>/.
 # =============================================================================
 set -euo pipefail
@@ -122,6 +123,10 @@ fi
 
 if want 7; then
   log_run s7 "$PY" "$PIPE/s7_verify_glb.py" --out "$OUT"
+fi
+
+if want 8; then
+  log_run s8 blender_run "$PIPE/s8_render_previews.py" --out "$OUT"
 fi
 
 echo ""

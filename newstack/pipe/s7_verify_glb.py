@@ -2,14 +2,20 @@
 """Stage 7 -- verify the GLB by MEASUREMENT, not by claiming (pure stdlib).
 
 Parses the GLB binary header + JSON chunk directly (no deps) and checks:
-  - valid glTF 2.0 container, exactly one mesh/primitive
-  - morph target COUNT == manifest's supported count (52 expected)
+  - valid glTF 2.0 container, exactly one mesh; ONE OR MORE primitives (the
+    exporter splits one primitive per material -- HeadMat + eye material(s))
+  - EVERY primitive carries the full morph target set (count == manifest's
+    supported count, 52 expected) and each target's POSITION accessor count
+    == that primitive's base POSITION count
   - morph target NAMES (mesh extras.targetNames) == manifest supported set,
     exact spelling -- the ARKit contract the whole pipeline exists to honor
-  - every target's POSITION accessor count == base POSITION count
-    (note: the exporter splits verts at UV seams, so base count >= 26719;
+  - summed base POSITION count >= 26719 (the exporter splits verts at UV
+    seams and material boundaries -- MORE is benign, FEWER means verts LOST;
     the 26719 topology authority is enforced at the Blender stage)
-  - a texture image is embedded and wired as baseColorTexture
+  - a texture image is embedded and wired as baseColorTexture on EVERY
+    material (head albedo + dedicated eye texture(s))
+  - every material is explicitly opaque: alphaMode == "OPAQUE" (explicit,
+    not defaulted -- s6 hardens this) and doubleSided is false/absent
 
 Exit code 0 = PASS. Writes out/export/verify_report.json.
 """
@@ -58,27 +64,37 @@ def main():
     if len(meshes) != 1:
         fails.append(f"expected 1 mesh, got {len(meshes)}")
     prims = meshes[0].get("primitives", []) if meshes else []
-    if len(prims) != 1:
-        fails.append(f"expected 1 primitive, got {len(prims)}")
+    if not prims:
+        fails.append("mesh has no primitives")
+    info["primitive_count"] = len(prims)
 
     if prims:
-        prim = prims[0]
         acc = gltf["accessors"]
-        base_pos = acc[prim["attributes"]["POSITION"]]["count"]
-        info["position_count"] = base_pos
-        if base_pos < N_VERTS:
-            fails.append(f"POSITION count {base_pos} < {N_VERTS} -- verts LOST")
-        elif base_pos > N_VERTS:
-            info["note_splits"] = (f"POSITION {base_pos} > {N_VERTS}: exporter "
-                                   "split verts at UV seams (expected, benign)")
-        targets = prim.get("targets", [])
-        info["morph_target_count"] = len(targets)
-        if len(targets) != len(expected):
-            fails.append(f"morph target count {len(targets)} != {len(expected)}")
-        bad_counts = [i for i, tg in enumerate(targets)
-                      if acc[tg["POSITION"]]["count"] != base_pos]
-        if bad_counts:
-            fails.append(f"targets with POSITION count != base: {bad_counts}")
+        pos_counts, tgt_counts = [], []
+        for pi, prim in enumerate(prims):
+            base_pos = acc[prim["attributes"]["POSITION"]]["count"]
+            pos_counts.append(base_pos)
+            targets = prim.get("targets", [])
+            tgt_counts.append(len(targets))
+            if len(targets) != len(expected):
+                fails.append(f"primitive {pi}: morph target count "
+                             f"{len(targets)} != {len(expected)}")
+            bad_counts = [i for i, tg in enumerate(targets)
+                          if acc[tg["POSITION"]]["count"] != base_pos]
+            if bad_counts:
+                fails.append(f"primitive {pi}: targets with POSITION count "
+                             f"!= base: {bad_counts}")
+        info["position_counts"] = pos_counts
+        info["morph_target_count"] = tgt_counts[0] if tgt_counts else 0
+        total_pos = sum(pos_counts)
+        info["position_count"] = total_pos
+        if total_pos < N_VERTS:
+            fails.append(f"summed POSITION {total_pos} < {N_VERTS} -- "
+                         "verts LOST")
+        elif total_pos > N_VERTS:
+            info["note_splits"] = (f"POSITION {total_pos} > {N_VERTS}: "
+                                   "exporter split verts at UV seams / "
+                                   "material boundaries (expected, benign)")
 
         tnames = (meshes[0].get("extras", {}) or {}).get("targetNames")
         if not tnames:
@@ -100,10 +116,26 @@ def main():
     if not images:
         warns.append("no embedded texture image")
     mats = gltf.get("materials", [])
-    has_basecolor = any("baseColorTexture" in (m.get("pbrMetallicRoughness") or {})
-                        for m in mats)
-    if images and not has_basecolor:
-        fails.append("image embedded but no material baseColorTexture wiring")
+    info["materials"] = []
+    for m in mats:
+        entry = {"name": m.get("name"),
+                 "alphaMode": m.get("alphaMode"),
+                 "doubleSided": m.get("doubleSided", False),
+                 "textured": "baseColorTexture" in
+                             (m.get("pbrMetallicRoughness") or {})}
+        info["materials"].append(entry)
+        if entry["alphaMode"] != "OPAQUE":
+            fails.append(f"material {entry['name']}: alphaMode "
+                         f"{entry['alphaMode']!r} != explicit 'OPAQUE' "
+                         "(s6 hardening missing?)")
+        if entry["doubleSided"]:
+            fails.append(f"material {entry['name']}: doubleSided true -- "
+                         "single-sided opaque export expected")
+        if images and not entry["textured"]:
+            fails.append(f"material {entry['name']}: no baseColorTexture "
+                         "wiring")
+    if len(prims) != len(mats):
+        warns.append(f"{len(prims)} primitives vs {len(mats)} materials")
 
     report = {"glb": str(glb_path), "pass": not fails,
               "fails": fails, "warns": warns, "info": info}
@@ -113,7 +145,12 @@ def main():
     print(f"[s7] {glb_path} ({nbytes/1e6:.1f} MB)")
     print(f"[s7] morph targets: {info.get('morph_target_count')} "
           f"(expected {len(expected)}); POSITION count "
-          f"{info.get('position_count')} (mesh authority {N_VERTS})")
+          f"{info.get('position_count')} (mesh authority {N_VERTS}) "
+          f"across {info.get('primitive_count')} primitive(s) "
+          f"{info.get('position_counts')}")
+    for m in info.get("materials", []):
+        print(f"[s7] material {m['name']}: alphaMode={m['alphaMode']} "
+              f"doubleSided={m['doubleSided']} textured={m['textured']}")
     for w in warns:
         print(f"[s7 WARN] {w}")
     for fmsg in fails:
