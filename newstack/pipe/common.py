@@ -42,6 +42,11 @@ ICT_REGIONS = {
 }
 EXTERIOR_END = 11248  # verts [0, 11248) = face + head/neck skin (shrinkable)
 
+# Eye sockets L+R (ICT README ordinals #3-#4): the inner lid/socket walls
+# visible around the eyeball -- they should read as shadowed SKIN, not as
+# mouth interior, when vertex-color fallbacks are painted (s5).
+EYE_SOCKETS = (13294, 14062)
+
 # Transparent-purpose eye shells (ICT README ordinals #9-#14: lacrimal fluid
 # L/R + eye blend L/R + eye occlusion L/R -- Unreal Digital-Human style
 # translucent-shader meshes). MEASURED: they sit up to z=10.6 IN FRONT of the

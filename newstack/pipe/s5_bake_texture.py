@@ -369,6 +369,8 @@ def main():
     skin_mean = (photo_v[ext_v & vis_v].mean(0)
                  if (ext_v & vis_v).any() else np.array([0.75, 0.6, 0.55]))
     vcol[ext_v] = skin_mean
+    from common import EYE_SOCKETS
+    vcol[EYE_SOCKETS[0]:EYE_SOCKETS[1]] = skin_mean * 0.8  # shadowed lid skin
     if clay_ply.is_file():
         from scipy.spatial import cKDTree
         dist_v, idx_v = cKDTree(cverts).query(verts[ext_v], k=1)
