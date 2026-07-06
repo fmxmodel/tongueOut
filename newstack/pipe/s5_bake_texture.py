@@ -341,6 +341,48 @@ def main():
           f"{'' if eye_metrics['shared'] else ' + eye_right.png'} "
           f"(shared={eye_metrics['shared']}, model x<0 iris from {left_side}, "
           f"iris_uv_radius={eye_metrics['iris_uv_radius']:.3f})")
+
+    # ---- per-vertex colors for the UDIM tiles the albedo cannot carry.
+    # MEASURED: ICT UVs are multi-tile (face spans u in [0,2], head_neck
+    # [1,2], mouth socket [1,3], teeth [3,4], lashes up to [0,7]); this bake
+    # only fills tile 0, and a wrapping sampler would paint every tile-1+
+    # surface with the FACE image (the infamous stretched-face back of head).
+    # s6 gives those polys a vertex-colored material instead: photo where
+    # visible, TripoSR clay (hair!) where near, honest flat interior defaults.
+    vcol = np.zeros((len(verts), 3))
+    vreg = np.searchsorted(REGION_BOUNDS, np.arange(len(verts)), side="right")
+    vcol[vreg == 2] = COL_MOUTH          # mouth socket + eye sockets
+    vcol[vreg == 3] = COL_TEETH
+    vcol[vreg == 4] = COL_SCLERA         # eyeballs (unused -- EyeMat wins)
+    vcol[vreg == 5] = [0.23, 0.16, 0.12]  # lashes/lacrimal: dark hair tone
+    ext_v = vreg <= 1                    # face + head_neck skin
+    nv_v = facing_sign * (normals @ view)
+    xi_v = np.clip((uv_all[:, 0] * zscale).astype(np.int64), 0, zw - 1)
+    yi_v = np.clip((uv_all[:, 1] * zscale).astype(np.int64), 0, zh - 1)
+    inb_v = ((uv_all[:, 0] >= 0) & (uv_all[:, 0] < W)
+             & (uv_all[:, 1] >= 0) & (uv_all[:, 1] < H))
+    vis_v = (inb_v & (depth_all >= zbuf[yi_v, xi_v] - args.zbuf_eps)
+             & (nv_v > args.ndotv_lo))
+    w_v = smoothstep(nv_v, args.ndotv_lo, args.ndotv_hi)
+    w_v[~vis_v] = 0.0
+    photo_v = bilinear_sample(photo, uv_all)
+    skin_mean = (photo_v[ext_v & vis_v].mean(0)
+                 if (ext_v & vis_v).any() else np.array([0.75, 0.6, 0.55]))
+    vcol[ext_v] = skin_mean
+    if clay_ply.is_file():
+        from scipy.spatial import cKDTree
+        dist_v, idx_v = cKDTree(cverts).query(verts[ext_v], k=1)
+        near = dist_v < args.clay_max_dist
+        tmp = vcol[ext_v]
+        tmp[near] = ccols[idx_v[near]]
+        vcol[ext_v] = tmp
+    m_v = ext_v & (w_v > 0)
+    vcol[m_v] = (w_v[m_v, None] * photo_v[m_v]
+                 + (1 - w_v[m_v, None]) * vcol[m_v])
+    np.save(od / "vertex_colors.npy", vcol.astype(np.float32))
+    print(f"[s5] per-vertex tile-fallback colors -> vertex_colors.npy "
+          f"(photo-visible {int((ext_v & (w_v > 0)).sum())} skin verts, "
+          f"skin mean {np.round(skin_mean, 3)})")
     wmap = np.zeros((T, T))
     wmap[covered] = w_photo
     Image.fromarray((wmap * 255).astype(np.uint8)).save(od / "debug_w_photo.png")

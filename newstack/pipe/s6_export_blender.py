@@ -13,6 +13,11 @@ MATERIALS: the eyeball polygons (verts in ICT_REGIONS["eyeballs"]) get their
 own eye material(s) bound to s5's dedicated eye texture(s) -- eye_left.png
 for the x<0 eyeball, eye_right.png for x>=0 when present, otherwise one
 shared EyeMat (the file contract: eye_right.png existing == separate irises).
+Polys whose UVs live beyond UDIM tile 0 (MEASURED: ICT's atlas is multi-tile,
+u up to 7 -- skull back, mouth socket, teeth, lashes) cannot use the tile-0
+albedo (a wrapping sampler would paint them with the FACE image: the
+stretched-face back of head), so they get RestMat driven by s5's per-vertex
+colors (photo where visible, clay hair, honest interior defaults).
 Everything else stays on HeadMat. Multiple materials => the exporter splits
 the mesh into multiple primitives; morph targets are exported on ALL of them
 and extras.targetNames stays mesh-level, so the ARKit name contract holds.
@@ -60,6 +65,37 @@ import bpy  # noqa: E402
 CM_TO_M = 0.01
 
 
+def srgb_to_linear(c):
+    c = np.asarray(c, dtype=np.float64)
+    return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+
+
+def harden_opaque_props(mat):
+    mat.use_backface_culling = True  # -> glTF doubleSided=false
+    for attr, val in (("blend_method", "OPAQUE"),
+                      ("surface_render_method", "DITHERED"),
+                      ("show_transparent_back", False)):
+        try:
+            setattr(mat, attr, val)
+        except (AttributeError, TypeError):
+            pass  # property renamed/removed across Blender versions
+
+
+def make_opaque_vcol_material(name, attr_name, roughness):
+    """Vertex-colored Principled material (for the UDIM tiles the single
+    baked albedo cannot carry -- see the s5 vertex_colors.npy rationale)."""
+    mat = bpy.data.materials.new(name)
+    mat.use_nodes = True
+    bsdf = mat.node_tree.nodes["Principled BSDF"]
+    bsdf.inputs["Roughness"].default_value = roughness
+    bsdf.inputs["Alpha"].default_value = 1.0
+    vc = mat.node_tree.nodes.new("ShaderNodeVertexColor")
+    vc.layer_name = attr_name
+    mat.node_tree.links.new(vc.outputs["Color"], bsdf.inputs["Base Color"])
+    harden_opaque_props(mat)
+    return mat
+
+
 def make_opaque_tex_material(name, img_path, roughness):
     """Textured Principled material hardened for opaque single-sided export."""
     mat = bpy.data.materials.new(name)
@@ -76,14 +112,7 @@ def make_opaque_tex_material(name, img_path, roughness):
         mat.node_tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
     else:
         print(f"[s6 WARN] {img_path} missing -- {name} exports untextured")
-    mat.use_backface_culling = True  # -> glTF doubleSided=false
-    for attr, val in (("blend_method", "OPAQUE"),
-                      ("surface_render_method", "DITHERED"),
-                      ("show_transparent_back", False)):
-        try:
-            setattr(mat, attr, val)
-        except (AttributeError, TypeError):
-            pass  # property renamed/removed across Blender versions
+    harden_opaque_props(mat)
     return mat
 
 
@@ -262,19 +291,22 @@ def main():
 
     eye_l_png = tex_dir / "eye_left.png"
     eye_r_png = tex_dir / "eye_right.png"
+    vcol_npy = tex_dir / "vertex_colors.npy"
     mat_names = ["HeadMat"]
+    seg = faces_off[:-1]
+    counts = np.diff(faces_off)
+    mat_idx = np.zeros(len(counts), dtype=np.int32)
+
+    # per-polygon eyeball membership from the region vertex range
+    eb0, eb1 = ICT_REGIONS["eyeballs"]
+    inr = ((faces_flat >= eb0) & (faces_flat < eb1)).astype(np.uint8)
+    all_in = np.minimum.reduceat(inr, seg).astype(bool)
+    any_in = np.maximum.reduceat(inr, seg).astype(bool)
+    assert (all_in == any_in).all(), \
+        "polygons straddling the eyeball vertex range -- region drift, STOP"
+
     if eye_l_png.is_file():
-        # per-polygon eyeball membership from the region vertex range
-        eb0, eb1 = ICT_REGIONS["eyeballs"]
-        inr = ((faces_flat >= eb0) & (faces_flat < eb1)).astype(np.uint8)
-        seg = faces_off[:-1]
-        all_in = np.minimum.reduceat(inr, seg).astype(bool)
-        any_in = np.maximum.reduceat(inr, seg).astype(bool)
-        assert (all_in == any_in).all(), \
-            "polygons straddling the eyeball vertex range -- region drift, STOP"
-        counts = np.diff(faces_off)
         meanx = np.add.reduceat(neutral[faces_flat, 0], seg) / counts
-        mat_idx = np.zeros(len(counts), dtype=np.int32)
         shared_eye = not eye_r_png.is_file()  # s5's file contract
         if shared_eye:
             obj.data.materials.append(
@@ -289,17 +321,42 @@ def main():
             mat_names += ["EyeL", "EyeR"]
             mat_idx[all_in & (meanx < 0)] = 1
             mat_idx[all_in & (meanx >= 0)] = 2
-        mesh.polygons.foreach_set("material_index", mat_idx)
-        mesh.update()
         n_eye = int(all_in.sum())
         print(f"[s6] eye material(s) {mat_names[1:]} on {n_eye} polys "
               f"(x<0: {int((all_in & (meanx < 0)).sum())}, "
-              f"x>=0: {int((all_in & (meanx >= 0)).sum())}); "
-              f"HeadMat keeps {int(len(counts)) - n_eye}")
+              f"x>=0: {int((all_in & (meanx >= 0)).sum())})")
         assert n_eye > 0, "no eyeball polygons found -- region drift, STOP"
     else:
         print("[s6 WARN] out/tex/eye_left.png missing -- eyes stay on HeadMat "
               "(flat sclera); run s5 first for real irises")
+
+    # UDIM tile-1+ polys: the baked albedo only carries tile 0 (MEASURED:
+    # ICT UVs span u up to 7); with a wrapping sampler these polys would show
+    # the FACE image (stretched-face back of head, face-textured teeth).
+    # They get RestMat driven by s5's per-vertex colors instead.
+    if vcol_npy.is_file():
+        umax = np.maximum.reduceat(vt[corner_vt, 0], seg)
+        rest = (umax > 1.0) & ~all_in
+        if rest.any():
+            vcol = np.load(vcol_npy).astype(np.float64)
+            assert len(vcol) == N_VERTS, "vertex_colors.npy topology drift"
+            attr = mesh.color_attributes.new("Col", "FLOAT_COLOR", "POINT")
+            rgba = np.concatenate(
+                [srgb_to_linear(vcol), np.ones((N_VERTS, 1))], axis=1)
+            attr.data.foreach_set("color", rgba.astype(np.float32).ravel())
+            obj.data.materials.append(
+                make_opaque_vcol_material("RestMat", "Col", 0.6))
+            mat_idx[rest] = len(mat_names)
+            mat_names.append("RestMat")
+            print(f"[s6] RestMat (vertex colors) on {int(rest.sum())} "
+                  f"UDIM tile-1+ polys; HeadMat keeps "
+                  f"{int((mat_idx == 0).sum())}")
+    else:
+        print("[s6 WARN] out/tex/vertex_colors.npy missing -- tile-1+ polys "
+              "stay on HeadMat (wrapped face texture); rerun s5")
+
+    mesh.polygons.foreach_set("material_index", mat_idx)
+    mesh.update()
 
     glb_path = od / f"{args.name}.glb"
     export_kwargs = dict(

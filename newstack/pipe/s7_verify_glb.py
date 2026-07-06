@@ -13,8 +13,8 @@ Parses the GLB binary header + JSON chunk directly (no deps) and checks:
     (s6 drops the transparent-purpose lacrimal/eye-blend/eye-occlusion FACES;
     UV-seam/material splits add verts back -- fewer than that floor means
     verts LOST; the 26719 topology authority is enforced at the Blender stage)
-  - a texture image is embedded and wired as baseColorTexture on EVERY
-    material (head albedo + dedicated eye texture(s))
+  - every material is colored: baseColorTexture (head albedo, eye textures)
+    OR COLOR_0 vertex colors (RestMat = the UDIM tile-1+ polygons)
   - every material is explicitly opaque: alphaMode == "OPAQUE" (explicit,
     not defaulted -- s6 hardens this) and doubleSided is false/absent
 
@@ -128,12 +128,17 @@ def main():
         warns.append("no embedded texture image")
     mats = gltf.get("materials", [])
     info["materials"] = []
-    for m in mats:
+    # a material may be colored by a texture OR by COLOR_0 vertex colors
+    # (RestMat carries the UDIM tile-1+ polys via per-vertex colors)
+    vcol_mats = {prim.get("material") for prim in prims
+                 if "COLOR_0" in prim.get("attributes", {})}
+    for mi, m in enumerate(mats):
         entry = {"name": m.get("name"),
                  "alphaMode": m.get("alphaMode"),
                  "doubleSided": m.get("doubleSided", False),
                  "textured": "baseColorTexture" in
-                             (m.get("pbrMetallicRoughness") or {})}
+                             (m.get("pbrMetallicRoughness") or {}),
+                 "vertex_colored": mi in vcol_mats}
         info["materials"].append(entry)
         if entry["alphaMode"] != "OPAQUE":
             fails.append(f"material {entry['name']}: alphaMode "
@@ -142,9 +147,9 @@ def main():
         if entry["doubleSided"]:
             fails.append(f"material {entry['name']}: doubleSided true -- "
                          "single-sided opaque export expected")
-        if images and not entry["textured"]:
-            fails.append(f"material {entry['name']}: no baseColorTexture "
-                         "wiring")
+        if images and not entry["textured"] and not entry["vertex_colored"]:
+            fails.append(f"material {entry['name']}: neither baseColorTexture "
+                         "nor COLOR_0 vertex colors")
     if len(prims) != len(mats):
         warns.append(f"{len(prims)} primitives vs {len(mats)} materials")
 
@@ -161,7 +166,8 @@ def main():
           f"{info.get('position_counts')}")
     for m in info.get("materials", []):
         print(f"[s7] material {m['name']}: alphaMode={m['alphaMode']} "
-              f"doubleSided={m['doubleSided']} textured={m['textured']}")
+              f"doubleSided={m['doubleSided']} textured={m['textured']} "
+              f"vertex_colored={m['vertex_colored']}")
     for w in warns:
         print(f"[s7 WARN] {w}")
     for fmsg in fails:
