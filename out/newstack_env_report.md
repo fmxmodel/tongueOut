@@ -127,3 +127,99 @@ Output GLB: `/workspace/newstack/out/export/head_arkit_v2.glb`. Blender stages a
 | 7 | MediaPipe task + Blender 4.2.3 headless verified | **PASS** |
 | 8 | s1/s2 smoke-test wiring (RC=0) | **PASS** |
 | 9 | restore_env.sh + RESTART.md written | **PASS** |
+
+---
+
+## 9. TripoSG geometry source (added 2026-07-07) — replaces TripoSR clay
+
+> NOTE: this section was produced on pod `root@195.26.233.74 -p 27697` (the live pod for
+> this task), not the `.87` pod named at the top of this report. GPU is the same model
+> (RTX 6000 Ada, 49 GB, CUDA 12.4, torch 2.4.1+cu124).
+
+### License gate (HARD BLOCKER) — PASS: MIT for code AND weights
+- **Code** — `github.com/VAST-AI-Research/TripoSG/LICENSE` (fetched raw), verbatim opening:
+  `MIT License / Copyright (c) 2025 VAST-AI-Research and contributors.` Full permission grant
+  including "to use, copy, modify, merge, publish, distribute, sublicense, and/or **sell**".
+- **Weights** — `huggingface.co/VAST-AI/TripoSG` model card metadata: `license: mit`.
+- Verdict: **commercial use OK**. TripoSG is a clean commercial-grade replacement for the
+  non-commercial-encumbered FaceVerse and for TripoSR (whose weights still need clearing).
+- **CAVEAT flagged for license-compliance:** the stock `scripts/inference_triposg.py`
+  auto-downloads **briaai/RMBG-1.4** (license `bria-rmbg-1.4` = **NON-commercial**) for
+  background removal. We DID NOT use it. The input was pre-matted with `rembg`/u2net
+  (Apache-2.0) and passed as an RGBA image with valid alpha; `prepare_image(rmbg_net=None)`
+  then skips RMBG. No RMBG weights touch the clay. The repo `NOTICE` also credits code
+  derived from HunyuanDiT / FlashVDM (Tencent Community Licenses) — code-provenance notes,
+  not shipped weights, but worth a human-lawyer glance for a commercial ship.
+
+### Install (isolated venv — main `/workspace/env` untouched)
+Dedicated venv `/workspace/env_triposg` (python 3.11.10) because TripoSG's deps conflict with
+the main stack (it pins `numpy==1.22.3`, needs recent `diffusers`; main env has numpy 2.4.6 +
+transformers 4.35 + hf_hub 0.17.3 that the TripoSR/pytorch3d stack depends on). Pins and why:
+
+| pkg | version | why pinned |
+|-----|---------|-----------|
+| torch / torchvision | 2.4.1+cu124 / 0.19.1+cu124 | match pod CUDA 12.4 (same as main env) |
+| diffusers | 0.30.0 | 0.39 (latest) registers a flash-attn `custom_op` with PEP-604 `float\|None` hints that torch 2.4.1 `infer_schema` cannot parse -> import crash. 0.30 has the APIs TripoSG needs (FP32LayerNorm, apply_rotary_emb, FlowMatchEulerDiscreteScheduler, PeftAdapterMixin) and imports clean on torch 2.4.1 |
+| transformers | 4.44.2 | v5.x (latest) risks moving Dinov2Model/BitImageProcessor; 4.44 is TripoSG-era and provides both |
+| huggingface_hub | 0.25.2 | diffusers 0.30 needs `errors.LocalEntryNotFoundError` (>=0.25) and peft 0.19 needs >=0.25; still has `cached_download` (<0.26) |
+| numpy | 2.4.6 | KEPT at 2.4.6 (not the repo's 1.22.3): 1.22.3 has no py3.11 wheel, and diso's CUDA ext was compiled against 2.4.6 (downgrading would ABI-break it) |
+| diso | 0.1.4 | built from sdist with `--no-build-isolation` (needs torch present); provides the 505^3 dual-MC surface extractor |
+| pymeshlab | 2023.12.post3 | decimation only |
+
+- Weights persisted (survive pod kill): `/workspace/pretrained_weights/TripoSG` = **7.5 GB**
+  (transformer + vae + dinov2 encoder + feature_extractor). `HF_HOME=/workspace/cache/huggingface`.
+- Repo clone: `/workspace/TripoSG`. Runner: `/workspace/TripoSG/run_triposg_clay.py`
+  (my wrapper; does NOT touch `newstack/pipe/*.py`). pip freeze: `/workspace/logs/triposg_pipfreeze.txt`.
+
+### Exact run command
+```
+source /workspace/env_triposg/bin/activate
+export CUDA_HOME=/usr/local/cuda HF_HOME=/workspace/cache/huggingface
+# pre-matte with permissive u2net -> input_rgba.png (bypasses non-commercial RMBG)
+cd /workspace/TripoSG
+python run_triposg_clay.py \
+  --rgba /workspace/newstack/out_triposg/input_rgba.png \
+  --outdir /workspace/newstack/out_triposg --seed 42 --steps 50 --guidance 7.0
+```
+
+### Output (measured) — location `/workspace/newstack/out_triposg/`
+| file | verts | faces | size | color |
+|------|------:|------:|-----:|-------|
+| random-person_triposg.glb (full, primary) | 3,652,472 | 2,581,396 | 74.8 MB | **NONE** |
+| random-person_triposg.obj / .ply (full) | 3,652,472 | 2,581,396 | 199 / 77 MB | NONE |
+| random-person_triposg_300k.glb (decimated companion) | 150,084 | 300,000 | 7.2 MB | NONE |
+
+- **Format:** GLB (also OBJ + PLY). Watertight. Surface = diso dual-MC on a **505^3** SDF grid.
+- **Scale:** normalized to ~[-1,1]; bbox extent 1.785 x 1.864 x 1.810.
+- **COLOR = NONE (geometry-only).** `visual.kind=None`, no per-vertex color, no UV, no texture
+  image. TripoSG is shape-only; **there is no official TripoSG texture model in the repo.**
+  Downstream color options: (a) transfer per-vertex color from the TripoSR clay
+  `out_triposr/0/mesh.obj` (HAS RGBA, e.g. row0 [111,97,85,255]) via nearest-surface sampling;
+  (b) an MV-Adapter / texture-gen pipeline; (c) reproject the front photo + infer back/side.
+- **VRAM:** peak 6.56 GB. **Time:** 18.2 s (50 steps) on RTX 6000 Ada.
+
+### TripoSR vs TripoSG
+| metric | TripoSR (kept, fallback color) | TripoSG full | TripoSG 300k |
+|--------|-------------------------------:|-------------:|-------------:|
+| verts | 81,812 | 3,652,472 | 150,084 |
+| faces | 163,346 | 2,581,396 | 300,000 |
+| vertex color | YES (RGBA) | NO | NO |
+| bbox extent | 0.86 x 0.74 x 0.98 | 1.79 x 1.86 x 1.81 | (same as full) |
+| surface | triplane NeRF -> MC | 505^3 SDF -> diso MC | decimated |
+
+TripoSG full = ~15.8x TripoSR's face count over a comparable/larger head volume, i.e. far
+higher surface sampling -> sharper detail and a tighter hairline. This is grounded in
+geometry resolution/topology (measured), **not** a rendered pixel diff. TripoSR clay is left
+UNMODIFIED and remains the fallback color source.
+
+### PASS / FAIL (TripoSG additions)
+| # | Deliverable | Result |
+|---|-------------|--------|
+| 10 | License gate (code+weights MIT, quoted) | **PASS** |
+| 11 | TripoSG installed, isolated venv, weights persisted (7.5 GB) | **PASS** |
+| 12 | Clay generated `out_triposg/random-person_triposg.glb` (2.58M f, watertight) | **PASS** |
+| 13 | Output format/color reported (GLB, geometry-only, no texture) | **PASS** |
+| 14 | TripoSR clay kept intact; pipe/*.py untouched | **PASS** |
+
+**STATUS: READY** (clay at `/workspace/newstack/out_triposg/random-person_triposg.glb`,
+color=none, license=MIT)

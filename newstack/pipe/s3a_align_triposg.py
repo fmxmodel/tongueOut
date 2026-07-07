@@ -20,9 +20,11 @@ transform onto that surface:
      between the two generators);
   3. FACE-POLISH ICP: the global fit registers the blob, but the two
      generators disagree most about hair, which biases the face by ~1 cm.
-     A final trimmed ICP registers the SG points that lie near the fitted
-     ICT FACE region [0,9409) against those face verts -- the exact surface
-     the s3b shrinkwrap will pull the ICT face onto.
+     A final trimmed RIGID-ONLY ICP (R+t, Kabsch -- scale stays from the
+     global fit: a free scale against a partial smooth template collapses,
+     measured 13.48 -> 9.70) registers the SG points that lie near the
+     fitted ICT FACE region [0,9409) against those face verts -- the exact
+     surface the s3b shrinkwrap will pull the ICT face onto.
 
 GATED (dies loudly, never ships a mis-aligned clay):
   - trimmed inlier RMSE  <= --max-rms cm  (global fit)
@@ -66,6 +68,18 @@ def proper_rotations_24():
                 mats.append(M)
     assert len(mats) == 24
     return mats
+
+
+def rigid_fit(src, dst):
+    """Kabsch: rotation+translation only (NO scale) minimizing ||R@src+t-dst||."""
+    mu_s, mu_d = src.mean(0), dst.mean(0)
+    xs, xd = src - mu_s, dst - mu_d
+    U, _, Vt = np.linalg.svd(xd.T @ xs / len(src))
+    S = np.eye(3)
+    if np.linalg.det(U) * np.linalg.det(Vt) < 0:
+        S[2, 2] = -1.0
+    R = U @ S @ Vt
+    return R, mu_d - R @ mu_s
 
 
 def icp_trimmed(src, tgt, tree, s, R, t, iters, trim, tol=1e-5):
@@ -185,7 +199,11 @@ def main():
         thr = np.quantile(d[keep], 1.0 - args.face_trim)
         keep &= d <= thr
         n_face_pairs = int(keep.sum())
-        s_f, R_f, t_f = umeyama(src[keep], face_tgt[j[keep]])
+        # rigid-only refit in the SCALED source frame (scale is frozen)
+        R_d, t_d = rigid_fit(s_f * (src[keep] @ R_f.T) + t_f,
+                             face_tgt[j[keep]])
+        R_f = R_d @ R_f
+        t_f = R_d @ t_f + t_d
     cur = s_f * (src @ R_f.T) + t_f
     d, _ = tree_face.query(cur, workers=-1)
     d_in = d[d <= args.face_cap]
