@@ -193,7 +193,14 @@ async function loadGlb() {
   setStatus(`Loading GLB from ${CONFIG.glbUrl} …`);
   const loader = new GLTFLoader();
   try {
-    const gltf = await loader.loadAsync(CONFIG.glbUrl);
+    // Cache-bust: the GLB is served at a stable URL, so browsers happily hand
+    // three.js a STALE cached copy after the file is rebuilt (this bit us with
+    // the doubleSided fix -- the page reloaded but the old doubleSided=false GLB
+    // stayed cached, so the head still rendered see-through). A per-load query
+    // forces a fresh fetch. Harmless in prod (the built asset is content-hashed).
+    const url = CONFIG.glbUrl + (CONFIG.glbUrl.includes('?') ? '&' : '?')
+      + 'cb=' + Date.now();
+    const gltf = await loader.loadAsync(url);
     scene.remove(placeholder);
     headRoot.add(gltf.scene);
     drivenMeshes = collectMorphMeshes(gltf.scene);
