@@ -194,6 +194,10 @@ def main():
                     help="cap feather full-on: brow_y + hi*(brow_y - chin_y)")
     ap.add_argument("--cap-min-pairs", type=int, default=1500,
                     help="min photo+clay cap texels to trust the cap transfer")
+    ap.add_argument("--cap-min-w", type=float, default=0.12,
+                    help="min photo weight for cap-fit texels (lower than "
+                         "--match-min-w: the scalp top is grazing by nature, "
+                         "and palette STATISTICS tolerate mild stretching)")
     ap.add_argument("--eye-size", type=int, default=512,
                     help="eye texture resolution (px)")
     ap.add_argument("--iris-frac", type=float, default=None,
@@ -343,8 +347,8 @@ def main():
         cap1 = brow_y + args.cap_hi * (brow_y - chin_y)
         w_cap = smoothstep(pos[:, 1], cap0, cap1)
         if not args.no_cap_match:
-            cpair = ((reg <= 1) & clay_ok & (w_photo >= args.match_min_w)
-                     & (w_cap > 0.7))
+            cpair = ((reg <= 1) & clay_ok & (w_photo >= args.cap_min_w)
+                     & (w_cap > 0.5))
             n_cpair = int(cpair.sum())
             if n_cpair >= args.cap_min_pairs:
                 mu_c, sd_c = clay_raw[cpair].mean(0), clay_raw[cpair].std(0)
