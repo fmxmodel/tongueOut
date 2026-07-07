@@ -87,7 +87,15 @@ def strip_background_slab(v, f, eps=0.06, ang_deg=25.0):
     hist, edges_ = np.histogram(proj[wallish], bins=200,
                                 weights=fa[wallish])
     d_star = 0.5 * (edges_[np.argmax(hist)] + edges_[np.argmax(hist) + 1])
-    if np.median(v @ n) < d_star:                  # person on negative side
+    # person side = the side the mesh extends FAR from the wall (a vertex
+    # MEDIAN is unreliable: the shard chaos hugging the wall outnumbers the
+    # head and flipped the cut onto the FACE half -- measured)
+    proj_v = v @ n
+    pos = proj_v[proj_v > d_star] - d_star
+    neg = d_star - proj_v[proj_v < d_star]
+    ext_pos = float(np.percentile(pos, 95)) if len(pos) else 0.0
+    ext_neg = float(np.percentile(neg, 95)) if len(neg) else 0.0
+    if ext_neg > ext_pos:                          # person on negative side
         n, d_star, proj = -n, -d_star, -proj       # -> flip toward person
     behind = proj < d_star + eps                   # wall band + all behind it
     m.update_faces(~behind)
