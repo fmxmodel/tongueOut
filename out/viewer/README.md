@@ -1,15 +1,19 @@
-# ARKit Avatar Viewer / Driver (Track B1 — FLAME 2023 Open, Phase 5)
+# ARKit Avatar Viewer / Driver (new stack — head_arkit_v2, 52/52)
 
-Loads the rigged head `out/head_arkit.glb` (ARKit-named morph targets — the
-FLAME-supported subset of Apple's 52) in three.js and drives its
-`morphTargetInfluences` from **MediaPipe FaceLandmarker** blendshapes — by **exact,
-case-sensitive `categoryName` → `morphTargetDictionary` lookup**. No shape order is
-assumed; nothing is renamed. The loaded GLB's `morphTargetDictionary` is the **sole
-source of truth** for what can be driven: the driver drives all 52 MediaPipe ARKit
-categories and **no-ops + logs** any name the GLB doesn't carry. For B1 that honestly
-covers the a-priori-unsupported shapes (`tongueOut`, `cheekPuff`, `cheekSquintLeft`,
-`cheekSquintRight`) plus **any shape the pod later demotes**. Supports **live webcam**
-and a **supplied video file**, with influence **smoothing**.
+Loads the rigged head `out/head_arkit_v2.glb` in three.js and drives its
+`morphTargetInfluences` live from **MediaPipe FaceLandmarker** blendshapes — by
+**exact, case-sensitive `categoryName` → `morphTargetDictionary` lookup**. No shape
+order is assumed; nothing is renamed. The GLB is a single mesh (`HeadARKit`) split into
+**three opaque primitives** (`HeadMat` + `EyeMat` + `RestMat`), each carrying the **same
+52 ARKit morph targets**; three.js loads it as three morph-bearing meshes and the driver
+pushes every frame to **all of them**, resolving each target by name per-mesh (the
+per-primitive index order can differ — that's why we never assume an index).
+
+All **51** MediaPipe-emitted ARKit categories resolve **1:1** to a morph target. The one
+ARKit name MediaPipe never emits is **`tongueOut`** — it is present and mappable in the
+GLB, just not driven by the webcam, so it has a dedicated **manual slider**. Supports
+**live webcam** and a **supplied video file**, with influence **smoothing** and an
+optional **head-pose** rotation from `facialTransformationMatrixes`.
 
 Pinned: `three@0.170.0`, `@mediapipe/tasks-vision@0.10.14`, `vite@^6`.
 
@@ -17,41 +21,36 @@ Pinned: `three@0.170.0`, `@mediapipe/tasks-vision@0.10.14`, `vite@^6`.
 
 ```bash
 cd out/viewer
-npm install            # already done in the scaffold; re-run only if node_modules is gone
-npm run dev            # http://localhost:5173  (predev copies MediaPipe wasm locally)
+npm install
+npm run dev            # http://localhost:5173
 ```
 
-`npm run dev` serves the app AND (via `vite.config.js` middleware) serves the pipeline-bus
-artifacts straight from `out/`:
+`predev`/`prebuild` stage the local assets automatically (no runtime CDN):
+- `copy-model.mjs`   → copies `out/head_arkit_v2.glb` into `public/` (served at `/head_arkit_v2.glb`).
+- `copy-mediapipe-assets.mjs` → copies the MediaPipe WASM runtime into `public/mediapipe/wasm`.
 
-- `GET /head_arkit.glb`   → streamed from `out/head_arkit.glb`; **clean 404** with a clear
-  message if it doesn't exist yet (the GLB is produced later on the GPU pod).
-- `GET /shapes/arkit_manifest.json` → the B1 ARKit shape contract (from `arkit-rigger`), read
-  read-only so the coverage/unresolved panels can label an **expected** no-op vs real drift.
-  (The legacy `GET /arkit_51_52_map.json` map is still mounted for back-compat.)
-
-So the app is **turnkey**: drop the exported head at `out/head_arkit.glb`, reload, and it
-loads. Until then it shows a graceful "not produced yet" message and keeps the UI live.
-
-### Point it at the GLB
-
-Nothing to configure — it loads from `out/head_arkit.glb` automatically. To use a different
-path, edit `glbUrl` in `src/config.js`.
+So the app is turnkey. To point at a different GLB, edit `glbUrl` in `src/config.js`.
 
 ### Webcam vs. video file
 
-In the UI: **Source** dropdown → `Webcam (live)` or `Video file` (then pick a file) → **Start**.
-Or via URL params (handy for automation):
+In the UI: **Source** → `Webcam (live)` or `Video file` (pick a file) → **Start**. Or via
+URL params (handy for automation):
 
 ```
 http://localhost:5173/?source=webcam&autostart=1
-http://localhost:5173/?video=/clips/subject.mp4&autostart=1&smoothing=0.5
+http://localhost:5173/?video=/clips/subject.mp4&autostart=1&smoothing=0.5&headpose=1
 ```
 
-### Smoothing
+### UI
 
-Slider (0–0.95). Temporal EMA per shape: `new = prev*s + target*(1-s)`.
-`0` = raw/instant (jittery), `0.6` = default, higher = smoother/laggier.
+- **Start / Stop**, **Reset morphs**, live **FPS** readout + MediaPipe status.
+- **mirror** — flips the preview (and, when on, the head-pose yaw so the avatar turns with you).
+- **head pose** — applies MediaPipe head rotation to the head group (off by default; toggleable).
+- **Smoothing** slider (0–0.95): temporal EMA per shape, `new = prev*s + target*(1-s)`.
+  `0` = raw/instant (jittery), `0.6` = default, higher = smoother/laggier.
+- **tongueOut** slider (always available — webcam never drives it).
+- **Manual morph sliders (all 52)** — collapsible; exercise any morph without a camera.
+  While the webcam runs the 51 tracked morphs are overwritten each frame; tongueOut holds.
 
 ## The MediaPipe model
 
@@ -62,23 +61,22 @@ npm run fetch-model    # downloads into public/models/ for fully-offline use
 ```
 
 or skip it — the app **falls back to the Google CDN** at runtime automatically
-(`modelAssetPathCdn` in `src/config.js`). The WASM runtime is always served locally
-(`npm run copy-assets`, run automatically on predev/prebuild).
+(`modelAssetPathCdn` in `src/config.js`). The WASM runtime is always served locally.
 
-## Verify (no GPU / no inference needed)
+## Verify (no GPU / no inference / no webcam needed)
 
 ```bash
-npm run verify-names   # static: exercises src/driver.js against out/shapes/arkit_manifest.json
-npm run build          # bundle check (vite build)
+npm run verify-names   # PARSES out/head_arkit_v2.glb and exercises src/driver.js
+npm run build          # production bundle (prebuild runs verify-names → FAILS on mismatch)
 ```
 
-`verify-names` reconciles the pure driver against the B1 manifest: it proves every
-**carried** (FLAME-supported) name resolves 1:1 by exact name, the **unsupported** names
-(`tongueOut`, `cheekPuff`, `cheekSquintLeft`, `cheekSquintRight` a-priori, plus any
-pod-demoted) no-op cleanly and are reported, and nothing is renamed/aliased. It also
-handles `run_state`: while the manifest is `DEFERRED-pod-run` it checks the **a-priori**
-classification and prints that the **final, authoritative check reruns against the
-pod-built GLB** once the manifest flips to `measured-on-pod`.
+`verify-names` reads the **real GLB** (stdlib GLB reader) and proves, by measurement:
+the head mesh carries **exactly 52** morph targets; their names are **set-equal to the
+ARKit-52 contract** (`src/arkit52.js`) with no renames / extras / missing; **every
+primitive** exposes all 52; the pure driver resolves **all 51** MediaPipe categories 1:1
+by name (against a dict with **reversed** indices, to prove order-independence); exactly
+**one** morph (`tongueOut`) is webcam-undriven; `_neutral` is skipped; nothing is aliased.
+It is wired as `prebuild`, so a mismatch **fails `npm run build`**.
 
 ## Headless / verification path (swap out the webcam)
 
@@ -87,57 +85,46 @@ and no MediaPipe model** by injecting blendshape frames through the *same* drive
 
 ```js
 // in a Puppeteer/Playwright page, after window.__viewer.ready resolves:
-await window.__viewer.ready;                       // GLB + contract loaded
+await window.__viewer.ready;                       // GLB loaded
 window.__viewer.injectBlendshapes([                // one frame of {categoryName, score}
   { categoryName: 'jawOpen',        score: 0.8 },
   { categoryName: 'mouthSmileLeft', score: 0.6 },
 ]);
+window.__viewer.setInfluence('tongueOut', 1.0);    // drive the webcam-undriven morph
 // then screenshot window.__viewer.renderer.domElement (preserveDrawingBuffer is on)
-window.__viewer.state;                             // {glbLoaded, morphTargets, unresolved, …}
+window.__viewer.state;   // {glbLoaded, morphTargets, morphTargetCount, contract52, unresolved, …}
 ```
 
 Other swaps:
 - **Supplied video** instead of live webcam: `?video=<url>&autostart=1`, or
   `window.__viewer.loadVideoUrl(url)`.
-- **Recorded blendshape trace**: feed frames from a JSON capture into
-  `injectBlendshapes(frame)` on a timer — deterministic, no model, reproducible pixels.
+- **Recorded blendshape trace**: feed frames from a JSON capture into `injectBlendshapes`
+  on a timer — deterministic, no model, reproducible pixels.
 
 `window.__viewer.state.unresolved` surfaces any MediaPipe `categoryName` that found no
-morph target, and `window.__viewer.state.expectedUnsupported` lists the contract's declared
-no-ops — so `qa-verifier` can tell an **expected** unresolved name (B1 unsupported /
-pod-demoted) from real naming drift.
+morph target (naming drift for `qa-verifier`); for this GLB it stays empty.
 
-## Attribution / third-party licenses (commercial B1)
+## Attribution / third-party licenses
 
-This product redistributes/builds on third-party components, so it ships their required
-notices and surfaces them in-app:
+The head asset base changed from FLAME to **ICT-FaceKit (Light, MIT)** + **TripoSR (MIT)**
+in the new commercial stack; the **commercial gate of record is `out/compliance_newstack.md`**.
 
-- `public/THIRD-PARTY-NOTICES.md` (→ `dist/THIRD-PARTY-NOTICES.md`) — the bundled notices:
-  **FLAME 2023 Open** (CC-BY-4.0 credit + FLAME-paper citation + "changes were made"),
-  **MediaPipe `@mediapipe/tasks-vision`** (full Apache-2.0 text; sourced from the upstream
-  `google-ai-edge/mediapipe` `LICENSE` because the npm tarball ships no LICENSE/NOTICE, and
-  required because `dist/mediapipe/wasm/*` redistributes the binaries; upstream has **no**
-  NOTICE file so §4(d) is not triggered), **three.js** (MIT), and a recorded note that
-  pod-side build tools (PyTorch3D/OpenCV/Blender) are **not** shipped so their notices are
-  not required by the web product.
+- **In-app:** the **"Credits / Licenses"** button opens a modal crediting ICT-FaceKit (MIT,
+  © USC-ICT 2020), TripoSR (MIT), MediaPipe (Apache-2.0), and three.js (MIT), with links.
 - `public/licenses/*.txt` (→ `dist/licenses/`) — verbatim `mediapipe-Apache-2.0-LICENSE.txt`
   and `three.js-MIT-LICENSE.txt`.
-- **In-app:** the **"Credits / Licenses"** button (bottom of the controls panel) opens a modal
-  showing the FLAME CC-BY credit + cite and the MediaPipe/three.js attributions, with links to
-  the full notices — satisfying CC-BY-4.0's "reasonably visible in the product" requirement.
-
-Wiring attribution does **not** by itself clear the ship: FLAME 2023 Open asset provenance and
-input-photo rights remain open per `out/compliance_report.md` (Track B1 is still
-`SHIP-CLEARED: no`).
+- `public/THIRD-PARTY-NOTICES.md` still carries the FLAME-era text and is **owned by the
+  licensing agent** — updating it to the ICT/TripoSR notices is that agent's task; this
+  viewer change only corrects the user-facing in-app credit and points to `compliance_newstack.md`.
 
 ## Files
 
-- `index.html` — UI (source toggle, start/stop, smoothing, coverage + unresolved panels,
-  Credits / Licenses modal).
-- `src/main.js` — three.js scene, GLB load (graceful degrade), MediaPipe VIDEO-mode setup,
-  driver loop, headless hook.
-- `src/driver.js` — **pure** name-resolution + smoothing (no three/DOM imports; reused by
-  the static verifier).
+- `index.html` — UI (source toggle, start/stop, reset, FPS, smoothing, head-pose, tongueOut +
+  full manual sliders, coverage + unresolved panels, Credits modal).
+- `src/main.js` — three.js scene, multi-primitive GLB load (opaque-hardened, graceful degrade),
+  MediaPipe VIDEO-mode setup, driver loop, head pose, manual sliders, headless hook.
+- `src/driver.js` — **pure** name-resolution + smoothing + clamp (no three/DOM; reused by the verifier).
+- `src/arkit52.js` — the 52-name ARKit contract + MediaPipe-not-emitted set (shared by app + verifier).
 - `src/config.js` — asset locations + tuning (the only place you edit paths).
-- `vite.config.js` — serves `out/` artifacts; excludes wasm from bundling.
-- `scripts/` — `copy-mediapipe-assets.mjs`, `fetch-model.mjs`, `verify-names.mjs`.
+- `vite.config.js` — excludes the MediaPipe wasm from bundling; static build.
+- `scripts/` — `copy-mediapipe-assets.mjs`, `copy-model.mjs`, `fetch-model.mjs`, `verify-names.mjs`.

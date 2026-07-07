@@ -44,7 +44,7 @@ export function applyBlendshapes(mesh, categories, opts = {}) {
       unresolved.push(name);
       continue;
     }
-    const target = c.score;
+    const target = clamp01(c.score); // MediaPipe scores are 0..1; clamp defensively
     const prev = influences[idx] ?? 0;
     influences[idx] = smoothing > 0 ? prev * smoothing + target * (1 - smoothing) : target;
     driven.push(name);

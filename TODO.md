@@ -72,7 +72,13 @@ newARC/
   that is not explicitly OPAQUE/single-sided/textured.
 - [x] Re-run `STAGES="4 5 6 7 8"` on pod — s7 PASS (52/52 names, 2 primitives, both
   materials OPAQUE), renders show iris+pupil+sclera, gaze morph moves the iris, back solid
-- [ ] Wire `head_arkit_v2.glb` into `out/viewer/` (three.js + MediaPipe); ICT→ARKit driver name map
+- [x] Wire `head_arkit_v2.glb` into `out/viewer/` (three.js + MediaPipe) — loads the 52/52 GLB
+  (3 opaque primitives HeadMat/EyeMat/RestMat), drives `morphTargetInfluences` by exact
+  `categoryName`→`morphTargetDictionary` on ALL primitives (no remap: names ARE ARKit-52 1:1).
+  `verify-names` parses the real GLB → 52/52, 51 MediaPipe categories resolve, tongueOut manual
+  slider (MediaPipe never emits it); prebuild gates the build; `npm run build` PASS. UI: webcam/
+  video, smoothing, head-pose toggle, FPS, tongueOut + full manual sliders. Run: `cd out/viewer
+  && npm install && npm run dev`.
 - [ ] Ship prep: THIRD-PARTY-NOTICES (rembg/U²-Net, TripoSR, ICT-FaceKit © USC-ICT 2020, MediaPipe, three.js, Draco)
 
 ## Decisions (don't re-litigate)
