@@ -39,6 +39,10 @@ def parse_args():
     ap.add_argument("--tag", required=True)
     ap.add_argument("--views", default="front,right,left,back")
     ap.add_argument("--res", type=int, default=1000)
+    ap.add_argument("--square", action="store_true",
+                    help="square resolution (exact ortho pixel<->world map)")
+    ap.add_argument("--dump-cam", default=None,
+                    help="write per-view ortho camera params to this json")
     return ap.parse_args(argv)
 
 
@@ -83,7 +87,7 @@ def main():
     sh.show_cavity = True
     scene.display.render_aa = "8"
     scene.render.resolution_x = args.res
-    scene.render.resolution_y = int(args.res * 1.25)
+    scene.render.resolution_y = args.res if args.square else int(args.res * 1.25)
     scene.render.image_settings.file_format = "PNG"
 
     lo, hi = verts.min(0), verts.max(0)
@@ -100,6 +104,7 @@ def main():
     scene.collection.objects.link(cam)
     scene.camera = cam
 
+    cams = {}
     for view in [v.strip() for v in args.views.split(",") if v.strip()]:
         if view not in VIEWS:
             raise SystemExit(f"unknown view {view} (have {list(VIEWS)})")
@@ -110,6 +115,16 @@ def main():
         scene.render.filepath = str(out_png)
         bpy.ops.render.render(write_still=True)
         print(f"[render] {out_png}")
+        cams[view] = {"center": [float(x) for x in c],
+                      "ortho_scale": float(cam_data.ortho_scale),
+                      "res_x": int(scene.render.resolution_x),
+                      "res_y": int(scene.render.resolution_y),
+                      "png": str(out_png)}
+    if args.dump_cam:
+        import json
+        with open(args.dump_cam, "w", encoding="utf-8") as f:
+            json.dump(cams, f, indent=2)
+        print(f"[render] cam params -> {args.dump_cam}")
 
 
 main()

@@ -12,22 +12,26 @@ Pipeline:
      The normal is oriented toward the person (vertex-median side), the wall
      band AND everything behind it are dropped, and the largest connected
      component is kept. Without this every downstream step is poisoned.
-  2. LANDMARK ALIGNMENT: the cleaned clay is handed to the PROVEN legacy
-     aligner (s3a_align_clay.py --prefix clay_sg): pytorch3d render sweep +
-     MediaPipe + landmark unprojection + trimmed Umeyama similarity.
-     MediaPipe detects the face on a LIT FLAT-GREY render just fine
-     (measured on this pod) -- the "no texture => no landmarks" assumption
-     held only for unlit/blank renders. Landmark correspondences are
-     SEMANTIC, so the scale is well-posed -- unlike blob ICP, which was
-     measured to be pose-degenerate on hairy partial heads (90-deg-off
-     optima, scale drift 13.5-18.9 across runs).
+  2. LANDMARK ALIGNMENT: one orthographic FRONT render of the cleaned clay
+     (Blender Workbench studio+cavity, exact pixel<->world mapping via
+     render_neutral.py --square --dump-cam) -> MediaPipe landmarks on the
+     grey sculpture (measured to detect fine on THIS render; the pytorch3d
+     Phong grey render stays a near-black silhouette and never detects) ->
+     each landmark pixel is unprojected by columnar max-z on the mesh
+     itself -> trimmed Umeyama similarity against the fitted ICT landmark
+     VERTICES. Landmark correspondences are SEMANTIC, so the scale is
+     well-posed -- unlike blob ICP, which was measured to be pose-degenerate
+     on hairy partial heads (90-deg-off optima, scale drift 13.5-18.9).
+     The front view is TripoSG's canonical convention (+Y-up, face->+Z,
+     verified on this pod); no detection => DIE, no silent fallback.
   3. FACE-POLISH: rigid-only trimmed ICP (R+t, Kabsch; scale frozen -- a
      free scale against a partial smooth template collapses, measured
      13.48 -> 9.70) of the near-face SG points onto the fitted ICT face
      region [0,9409) -- the exact surface s3b will shrinkwrap the face onto.
 
 GATED (dies loudly, never ships a mis-aligned clay):
-  - the legacy aligner must have used mediapipe+umeyama (bbox fallback = die)
+  - MediaPipe must detect a face on the front render and >= --min-lmk
+    landmarks must unproject onto the mesh
   - fitted-ICT INNER-face landmark verts (brows/nose/eyes/mouth, iBUG 17-67)
     -> aligned-SG-surface mean distance <= --max-face-dist cm
   - FRONT-DEPTH gate (direction-aware -- nearest-vertex distance alone lets
@@ -47,6 +51,8 @@ the s5 color source):
 
 import argparse
 import json
+import os
+import shutil
 import subprocess
 import sys
 import time
@@ -55,9 +61,12 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import ICT_REGIONS, P, die, out_dir, save_json  # noqa: E402
+from common import (ICT_REGIONS, P, detect_face, die, landmarks_to_np,  # noqa: E402
+                    out_dir, save_json, umeyama)
+from mp_ibug68 import MEDIAPIPE_IBUG68  # noqa: E402
 
 FACE_END = ICT_REGIONS["face"][1]  # 9409
+BLENDER_DEFAULT = "/workspace/blender/blender-4.2.3-linux-x64/blender"
 
 
 def strip_background_slab(v, f, eps=0.06, ang_deg=25.0):
@@ -128,6 +137,12 @@ def main():
                     default="/workspace/newstack/out_triposg/random-person_triposg_300k.glb")
     ap.add_argument("--task", default=P.MP_TASK)
     ap.add_argument("--out", default=P.OUT)
+    ap.add_argument("--blender", default=os.environ.get("BLENDER", BLENDER_DEFAULT))
+    ap.add_argument("--min-conf", type=float, default=0.3)
+    ap.add_argument("--min-lmk", type=int, default=40,
+                    help="GATE: minimum unprojected landmarks for umeyama")
+    ap.add_argument("--lmk-trim", type=float, default=0.15,
+                    help="fraction of worst landmark pairs dropped in pass 2")
     ap.add_argument("--slab-eps", type=float, default=0.06,
                     help="raw units; wall band half-width (everything at or "
                          "behind the wall is dropped)")
@@ -173,30 +188,84 @@ def main():
     cleaned_ply = od / "clay_sg_cleaned.ply"
     trimesh.Trimesh(vertices=v_raw, faces=faces, process=False)\
         .export(cleaned_ply)
+    cleaned_npz = od / "clay_sg_cleaned.npz"
+    np.savez(cleaned_npz, verts=v_raw.astype(np.float32),
+             faces=faces.astype(np.int32))
 
-    # ---- landmark alignment via the proven legacy aligner ---------------
-    cmd = [sys.executable, str(Path(__file__).resolve().parent / "s3a_align_clay.py"),
-           "--clay", str(cleaned_ply), "--task", str(args.task),
-           "--out", str(args.out), "--prefix", "clay_sg"]
-    print(f"[s3sg] invoking landmark aligner: {' '.join(cmd)}")
-    rc = subprocess.run(cmd).returncode
+    # ---- one ortho FRONT render (Blender Workbench; exact px<->world map)
+    cam_json = od / "clay_sg_detect_cam.json"
+    cmd = [args.blender, "--background", "--factory-startup", "--python",
+           str(Path(__file__).resolve().parent / "render_neutral.py"), "--",
+           "--out", str(args.out), "--tag", "sg_detect",
+           "--mesh", str(cleaned_npz), "--views", "front", "--res", "900",
+           "--square", "--dump-cam", str(cam_json)]
+    if not os.environ.get("DISPLAY") and shutil.which("xvfb-run"):
+        cmd = ["xvfb-run", "-a"] + cmd
+    print(f"[s3sg] front render: {' '.join(cmd)}")
+    rc = subprocess.run(cmd, stdout=subprocess.DEVNULL).returncode
     if rc != 0:
-        die(f"landmark aligner failed (exit {rc})")
-    with open(od / "clay_sg_align.json", encoding="utf-8") as fjs:
-        base_info = json.load(fjs)
-    if base_info.get("method") != "mediapipe+umeyama":
-        die(f"landmark aligner fell back to {base_info.get('method')} -- "
-            "NOT trusting a bbox alignment for the shrinkwrap target")
-    S = float(base_info["S"])
-    R = np.asarray(base_info["R"], dtype=np.float64)
-    T = np.asarray(base_info["T"], dtype=np.float64)
-    v_aligned = S * (v_raw @ R.T) + T
-    print(f"[s3sg] landmark alignment: rms={base_info['residual_rms_cm']:.2f} "
-          f"cm  scale={S:.4f}")
+        die(f"Blender front render failed (exit {rc})")
+    with open(cam_json, encoding="utf-8") as fjs:
+        cam = json.load(fjs)["front"]
 
-    # ---- rigid face polish onto the fitted ICT face ----------------------
+    # ---- MediaPipe on the grey render + columnar max-z unprojection ------
+    import cv2
+    img = cv2.imread(cam["png"])
+    if img is None:
+        die(f"render {cam['png']} unreadable")
+    rgb = np.ascontiguousarray(img[..., ::-1])
+    res = detect_face(rgb, args.task, args.min_conf)
+    if res is None:
+        die("MediaPipe found NO face on the TripoSG front render -- "
+            "cannot landmark-align (no silent fallback)")
+    lm = landmarks_to_np(res)  # normalized [0,1]
+
     fitted = np.load(Path(args.out) / "fit" / "fitted_neutral.npy")
     lmk_verts = np.load(Path(args.out) / "fit" / "topology.npz")["lmk_verts"]
+    ict_lmk = fitted[lmk_verts]
+
+    cx, cy = cam["center"][0], cam["center"][1]
+    S_o = cam["ortho_scale"]
+    rad = S_o / 120.0
+    sg_pts, ict_pts, used = [], [], []
+    dbg = img.copy()
+    N_px = cam["res_x"]
+    for i, mp_idx in enumerate(MEDIAPIPE_IBUG68):
+        u, v_ = float(lm[mp_idx, 0]), float(lm[mp_idx, 1])
+        x = cx + (u - 0.5) * S_o
+        y = cy + (0.5 - v_) * S_o
+        sel = (np.abs(v_raw[:, 0] - x) < rad) & (np.abs(v_raw[:, 1] - y) < rad)
+        if not sel.any():
+            continue
+        z = float(v_raw[sel, 2].max())
+        sg_pts.append((x, y, z))
+        ict_pts.append(ict_lmk[i])
+        used.append(i)
+        cv2.circle(dbg, (int(u * N_px), int(v_ * N_px)), 3, (0, 255, 0), -1)
+    cv2.imwrite(str(od / "clay_sg_debug_landmarks.png"), dbg)
+    if len(used) < args.min_lmk:
+        die(f"only {len(used)} landmarks unprojected onto the TripoSG mesh "
+            f"(need >= {args.min_lmk})")
+    sg_pts = np.asarray(sg_pts)
+    ict_pts = np.asarray(ict_pts)
+
+    # trimmed Umeyama similarity (semantic correspondences => scale well-posed)
+    S, R, T = umeyama(sg_pts, ict_pts)
+    resid = np.linalg.norm((S * (R @ sg_pts.T).T + T) - ict_pts, axis=1)
+    keep = resid <= np.quantile(resid, 1.0 - args.lmk_trim)
+    S, R, T = umeyama(sg_pts[keep], ict_pts[keep])
+    resid2 = np.linalg.norm((S * (R @ sg_pts[keep].T).T + T) - ict_pts[keep],
+                            axis=1)
+    lmk_rms = float(np.sqrt((resid2 ** 2).mean()))
+    base_info = {"n_landmarks_used": int(len(used)),
+                 "n_kept_after_trim": int(keep.sum()),
+                 "residual_rms_cm": lmk_rms,
+                 "residual_max_cm": float(resid2.max())}
+    v_aligned = S * (v_raw @ R.T) + T
+    print(f"[s3sg] landmark umeyama: {len(used)} unprojected, "
+          f"{int(keep.sum())} kept, rms={lmk_rms:.2f} cm  scale={S:.4f}")
+
+    # ---- rigid face polish onto the fitted ICT face ----------------------
     tree_face = cKDTree(fitted[:FACE_END])
     rng = np.random.default_rng(args.seed)
     src = v_aligned[rng.choice(len(v_aligned),
@@ -273,12 +342,10 @@ def main():
         failures.append(f"aligned SG y-extent ratio {y_ratio:.2f} is insane")
 
     info = {
-        "method": "slab-strip + landmark-umeyama (s3a_align_clay --prefix "
-                  "clay_sg, grey render) + rigid face-polish vs fitted ICT face",
-        "landmark_align": {k: base_info[k] for k in
-                           ("up", "azim_deg", "n_landmarks_used",
-                            "n_kept_after_trim", "residual_rms_cm",
-                            "residual_max_cm") if k in base_info},
+        "method": "slab-strip + front-ortho-render mediapipe landmarks + "
+                  "columnar-max-z unprojection + trimmed umeyama + rigid "
+                  "face-polish vs fitted ICT face",
+        "landmark_align": base_info,
         "slab_strip": strip_info,
         "face_polish_pairs": n_pairs,
         "face_polish_inlier_rms_cm": face_rms,
