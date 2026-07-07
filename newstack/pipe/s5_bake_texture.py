@@ -22,14 +22,16 @@ One diffuse map, no statistical/NC albedo prior:
           then PALETTE-MATCHED to the photo with a per-channel affine map
           fitted (residual-trimmed) on texels where photo AND clay overlap --
           so TripoSR's washed-out palette lands on the photo's palette and the
-          hairline/jaw blend has no color step. The SCALP CAP (above the
-          hairline, measured from the brow/chin landmarks) additionally gets a
-          per-channel mean/std transfer fitted ONLY on cap texels where photo
-          AND clay overlap: MEASURED, TripoSR's crown hallucination is
-          desaturated grey-beige and out-of-distribution vs all photo-visible
-          clay, so the global affine cannot land it on the subject's real
-          hair; the photo itself shows the true scalp-top palette (hair -- or
-          skin if bald, which self-corrects). Feathered below the hairline.
+          hairline/jaw blend has no color step. The HAIR ZONE (scalp cap
+          above the hairline + skull back above ear level, both measured from
+          the fitted landmarks) is special: MEASURED, TripoSR hallucinates
+          the hidden crown desaturated grey-beige, out-of-distribution vs ALL
+          photo-visible clay (its chroma is even inverted), so no fitted
+          distribution transfer can recover hair from it. There the palette
+          comes from the MEASURED photo hair (mean color of cap texels the
+          photo does see -- real hair; or scalp skin if bald, which
+          self-corrects) and TripoSR contributes only its LUMINANCE variation
+          (shading detail). Feathered below the hairline / around the ears.
   MIRROR  exterior texels with neither photo nor clay try the X-mirrored
           position through the same camera (faces are ~symmetric; person-mask
           enforced there too) before falling back to inpaint.
@@ -313,8 +315,6 @@ def main():
     clay_col = np.zeros_like(photo_col)
     clay_ok = np.zeros(K, dtype=bool)
     gain, offs = np.ones(3), np.zeros(3)
-    cap_gain, cap_offs = np.ones(3), np.zeros(3)
-    cap0 = cap1 = 0.0
     match_info = {"applied": False, "reason": "no clay"}
     cap_info = {"applied": False, "reason": "no clay"}
     ctree, ccols = None, None
@@ -335,35 +335,49 @@ def main():
                 clay_raw[pairs], photo_col[pairs], args.match_trim)
             if match_info["applied"]:
                 clay_col = np.clip(clay_raw * gain + offs, 0.0, 1.0)
-        # scalp-cap hair-palette transfer (see module docstring): the global
-        # affine is dominated by skin pairs and MEASURED cannot rescue the
-        # crown (TripoSR hallucinates it desaturated grey-beige, closer to
-        # the clay's SKIN cluster than to any hair color). The photo shows
-        # the real scalp-top above the hairline; per-channel mean/std
-        # transfer fitted there, applied to the cap fill, feathered below.
-        lmk_y = expressed[z["lmk_verts"]][:, 1]
+        # hair-zone palette (see module docstring): MEASURED, no fitted
+        # distribution transfer can rescue TripoSR's hidden-crown grey-beige
+        # (a global affine barely moves it; mean/std amplified its INVERTED
+        # chroma into green-grey). In the hair zone the palette is therefore
+        # the measured photo hair (cap texels the photo does see) and TripoSR
+        # contributes only luminance variation. Hair zone = scalp cap above
+        # the landmark-measured hairline + skull back above ear level.
+        lmk_pos = expressed[z["lmk_verts"]]
+        lmk_y = lmk_pos[:, 1]
         brow_y, chin_y = float(lmk_y[17:27].mean()), float(lmk_y[8])
         cap0 = brow_y + args.cap_lo * (brow_y - chin_y)
         cap1 = brow_y + args.cap_hi * (brow_y - chin_y)
-        w_cap = smoothstep(pos[:, 1], cap0, cap1)
+        y_ear = float(lmk_y[[0, 16]].mean())   # iBUG 0/16: jaw top by the ears
+        z_ear = float(lmk_pos[[0, 16], 2].mean())
+
+        def hair_zone_w(p):
+            crown = smoothstep(p[:, 1], cap0, cap1)
+            skull_back = (smoothstep(z_ear - p[:, 2], 1.0, 3.0)
+                          * smoothstep(p[:, 1], y_ear, y_ear + 3.0))
+            return np.maximum(crown, skull_back)
+
+        LUM_W = np.array([0.299, 0.587, 0.114])
+        cap_mu_p, cap_mu_lc = None, None
+        w_cap = hair_zone_w(pos)
         if not args.no_cap_match:
             cpair = ((reg <= 1) & clay_ok & (w_photo >= args.cap_min_w)
                      & (w_cap > 0.5))
             n_cpair = int(cpair.sum())
             if n_cpair >= args.cap_min_pairs:
-                mu_c, sd_c = clay_raw[cpair].mean(0), clay_raw[cpair].std(0)
-                mu_p, sd_p = photo_col[cpair].mean(0), photo_col[cpair].std(0)
-                cap_gain = np.clip(sd_p / np.maximum(sd_c, 1e-6), 0.4, 2.5)
-                cap_offs = mu_p - cap_gain * mu_c
-                cap_mapped = np.clip(clay_raw * cap_gain + cap_offs, 0.0, 1.0)
+                cap_mu_p = photo_col[cpair].mean(0)
+                lum = clay_raw @ LUM_W
+                cap_mu_lc = float(max(lum[cpair].mean(), 1e-6))
+                ratio = np.clip(lum / cap_mu_lc, 0.6, 1.4)
+                cap_mapped = np.clip(cap_mu_p[None] * ratio[:, None], 0.0, 1.0)
                 clay_col = ((1.0 - w_cap[:, None]) * clay_col
                             + w_cap[:, None] * cap_mapped)
                 cap_info = {"applied": True, "pairs": n_cpair,
+                            "mode": "photo-hair palette x TripoSR luminance",
                             "cap_y_cm": [round(cap0, 2), round(cap1, 2)],
-                            "gain": np.round(cap_gain, 3).tolist(),
-                            "offset": np.round(cap_offs, 3).tolist(),
-                            "photo_mu": np.round(mu_p, 3).tolist(),
-                            "clay_mu": np.round(mu_c, 3).tolist()}
+                            "skull_back": {"y_ear": round(y_ear, 2),
+                                           "z_ear": round(z_ear, 2)},
+                            "photo_hair_mu": np.round(cap_mu_p, 3).tolist(),
+                            "clay_cap_lum_mu": round(cap_mu_lc, 3)}
             else:
                 cap_info = {"applied": False, "pairs": n_cpair,
                             "reason": f"cap pairs < {args.cap_min_pairs}"}
@@ -564,8 +578,9 @@ def main():
                                          args.clay_knn)
         ccol_v = np.clip(ccol_raw_v * gain + offs, 0.0, 1.0)
         if cap_info.get("applied"):
-            w_cap_v = smoothstep(expressed[ext_v][:, 1], cap0, cap1)
-            cap_v = np.clip(ccol_raw_v * cap_gain + cap_offs, 0.0, 1.0)
+            w_cap_v = hair_zone_w(expressed[ext_v])
+            ratio_v = np.clip((ccol_raw_v @ LUM_W) / cap_mu_lc, 0.6, 1.4)
+            cap_v = np.clip(cap_mu_p[None] * ratio_v[:, None], 0.0, 1.0)
             ccol_v = ((1.0 - w_cap_v[:, None]) * ccol_v
                       + w_cap_v[:, None] * cap_v)
         near = dist_v < args.clay_max_dist
