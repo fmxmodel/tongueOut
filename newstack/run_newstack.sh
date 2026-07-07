@@ -41,16 +41,30 @@ BLENDER=${BLENDER:-/workspace/blender/blender-4.2.3-linux-x64/blender}
 PHOTO=${PHOTO:-/workspace/inputs/random-person.jpeg}
 ICT=${ICT:-$ROOT/ICT-FaceKit}
 CLAY=${CLAY:-$ROOT/out_triposr/0/mesh.obj}
+CLAY_SG=${CLAY_SG:-$ROOT/out_triposg/random-person_triposg_300k.glb}
 MP_TASK=${MP_TASK:-/workspace/models/mediapipe/face_landmarker.task}
 
 STAGES=${STAGES:-"1 2 3 4 5 6 7"}
 REFINE=${REFINE:-1}          # 0 = skip clay align + shrinkwrap (pure ICT fit)
+CLAY_SOURCE=${CLAY_SOURCE:-triposr}  # triposr | triposg (sharper geometry;
+                             # TripoSR still runs -- ICP target + s5 colors)
 TEX_SIZE=${TEX_SIZE:-1024}
 DRACO=${DRACO:-0}
 S2_ARGS=${S2_ARGS:-}         # e.g. "--lam-id 0.1 --iters2 1200"
 S3A_ARGS=${S3A_ARGS:-}       # e.g. "--force-bbox --fallback-up z_up"
+S3SG_ARGS=${S3SG_ARGS:-}     # e.g. "--max-rms 1.0"
 S3B_ARGS=${S3B_ARGS:-}       # e.g. "--max-disp 4 --face-weight 0.2"
+S3C_ARGS=${S3C_ARGS:-}       # e.g. "--max-reproj 25"
 S5_ARGS=${S5_ARGS:-}         # e.g. "--no-expression"
+
+# TripoSG path: sharp geometry-only clay. Region-weighted shrinkwrap: the FACE
+# takes the TripoSG shape (weight 1.0, feathered to 0 over head/neck), the
+# cranium/back stays clean ICT; bbox volume-match (prescale) closes the
+# bald-ICT vs haired-clay size gap first. Overridable via S3B_ARGS (last wins).
+S3B_SG_FLAGS="--weights face --prescale xyz
+  --clay-smooth-iters 6 --clay-smooth-factor 0.4
+  --smooth-iters 6 --smooth-lam 0.5
+  --protect-r0 1.0 --protect-r1 2.5 --nose-r0 0.3 --nose-r1 1.0"
 
 export PYTHONUNBUFFERED=1
 mkdir -p "$OUT/logs"
@@ -94,11 +108,24 @@ fi
 
 if want 3; then
   if [ "$REFINE" = "1" ]; then
+    # TripoSR landmark alignment ALWAYS runs: it is the s5 color source and
+    # (for the triposg path) the ICP target.
     # shellcheck disable=SC2086
     log_run s3a "$PY" "$PIPE/s3a_align_clay.py" \
         --clay "$CLAY" --task "$MP_TASK" --out "$OUT" $S3A_ARGS
+    if [ "$CLAY_SOURCE" = "triposg" ]; then
+      # shellcheck disable=SC2086
+      log_run s3sg "$PY" "$PIPE/s3a_align_triposg.py" \
+          --clay-sg "$CLAY_SG" --out "$OUT" $S3SG_ARGS
+      # shellcheck disable=SC2086
+      log_run s3b blender_run "$PIPE/s3b_refine_blender.py" --out "$OUT" \
+          --clay-npz "$OUT/clay/clay_sg_aligned.npz" $S3B_SG_FLAGS $S3B_ARGS
+    else
+      # shellcheck disable=SC2086
+      log_run s3b blender_run "$PIPE/s3b_refine_blender.py" --out "$OUT" $S3B_ARGS
+    fi
     # shellcheck disable=SC2086
-    log_run s3b blender_run "$PIPE/s3b_refine_blender.py" --out "$OUT" $S3B_ARGS
+    log_run s3c "$PY" "$PIPE/s3c_verify_refine.py" --out "$OUT" $S3C_ARGS
   else
     echo "=== [s3] REFINE=0 -- skipping clay align + shrinkwrap ==="
   fi
