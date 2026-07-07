@@ -18,10 +18,15 @@ transform onto that surface:
      everything behind it are dropped, then the largest connected component
      is kept. Without this the ICP centroid/scale/trim are all poisoned
      (measured: it locked 90 degrees off);
-  1. coarse init sweep: 24 proper axis-permutation rotations x centroid +
-     RMS-radius scale, each scored by a short trimmed ICP (TripoSG is
-     ~[-1,1]-normalized with its own axis convention -- scale AND orientation
-     are unknown);
+  1. global trimmed ICP from the IDENTITY-rotation init (measured on this
+     pod: TripoSG's canonical frame is already +Y-up / face-toward-+Z, the
+     ICT convention; scale is seeded from robust x-widths, translation from
+     crown/nose/median-x anchors). The trimmed blob objective is nearly
+     pose-invariant for hairy partial heads -- a 24-rotation sweep repeatedly
+     locked 90-deg-off poses -- so the sweep is only a FALLBACK, and the
+     winner is chosen by the direction-aware front-depth metric, never by
+     ICP rms. The ICP target is the SR HEAD BAND (y >= --target-ymin), not
+     the full bust, so SR's chest cannot bias the scale;
   2. fine trimmed ICP from the best init: Umeyama similarity (scale+R+t)
      refit each iteration on nearest-neighbour pairs, worst --trim quantile
      of correspondences dropped (hair interpretation + bust cropping differ
@@ -182,6 +187,9 @@ def main():
     ap.add_argument("--coarse-src", type=int, default=4000)
     ap.add_argument("--coarse-iters", type=int, default=10)
     ap.add_argument("--fine-iters", type=int, default=80)
+    ap.add_argument("--target-ymin", type=float, default=-8.0,
+                    help="cm; crop the SR target below this (head band) so "
+                         "the chest cannot bias the ICP scale")
     ap.add_argument("--trim", type=float, default=0.25,
                     help="fraction of worst NN correspondences dropped per iter")
     ap.add_argument("--face-iters", type=int, default=40,
@@ -239,65 +247,115 @@ def main():
     rng = np.random.default_rng(args.seed)
     src = v_raw[rng.choice(len(v_raw), min(args.n_src, len(v_raw)), replace=False)]
     src_c = src[rng.choice(len(src), min(args.coarse_src, len(src)), replace=False)]
-    tree = cKDTree(tgt_v)
+    # head-band target: SR's chest must not bias the ICP scale
+    tgt_head = tgt_v[tgt_v[:, 1] >= args.target_ymin]
+    tree = cKDTree(tgt_head)
 
-    mu_s, mu_t = src.mean(0), tgt_v.mean(0)
-    sig_s = float(np.linalg.norm(src - mu_s, axis=1).mean())
-    sig_t = float(np.linalg.norm(tgt_v - mu_t, axis=1).mean())
-    s0 = sig_t / max(sig_s, 1e-12)
-
-    # ---- coarse init sweep: 24 proper rotations, short trimmed ICP each
-    best = None  # (rms, s, R, t, cand_idx)
-    for ci, R0 in enumerate(proper_rotations_24()):
-        t_init = mu_t - s0 * (R0 @ mu_s)
-        s_c, R_c, t_c, rms_c, _ = icp_trimmed(
-            src_c, tgt_v, tree, s0, R0, t_init,
-            iters=args.coarse_iters, trim=0.30)
-        if best is None or rms_c < best[0]:
-            best = (rms_c, s_c, R_c, t_c, ci)
-    rms_c, s_f, R_f, t_f, ci = best
-    print(f"[s3sg] coarse best: candidate #{ci} rms={rms_c:.3f} cm")
-
-    # ---- fine trimmed ICP from the best init
-    s_f, R_f, t_f, rms_f, it_f = icp_trimmed(
-        src, tgt_v, tree, s_f, R_f, t_f,
-        iters=args.fine_iters, trim=args.trim)
-    print(f"[s3sg] fine ICP: {it_f} iters  inlier rms={rms_f:.3f} cm  "
-          f"scale={s_f:.4f}")
-
-    # global-fit metric (vs TripoSR) BEFORE the face polish
-    d_all, _ = tree.query(s_f * (src @ R_f.T) + t_f, workers=-1)
-    inlier = d_all <= np.quantile(d_all, 1.0 - args.trim)
-    inlier_rms = float(np.sqrt((d_all[inlier] ** 2).mean()))
-    median_nn = float(np.median(d_all))
-
-    # ---- face-polish ICP against the fitted ICT FACE region --------------
     fitted = np.load(Path(args.out) / "fit" / "fitted_neutral.npy")
     lmk_verts = np.load(Path(args.out) / "fit" / "topology.npz")["lmk_verts"]
     face_tgt = fitted[:FACE_END]
     tree_face = cKDTree(face_tgt)
-    n_face_pairs = 0
-    for _ in range(args.face_iters):
-        cur = s_f * (src @ R_f.T) + t_f
-        d, j = tree_face.query(cur, workers=-1)
-        keep = d <= args.face_cap
-        if keep.sum() < 500:
-            die(f"face polish: only {int(keep.sum())} SG points within "
-                f"{args.face_cap} cm of the fitted face -- global ICP is off")
-        thr = np.quantile(d[keep], 1.0 - args.face_trim)
-        keep &= d <= thr
-        n_face_pairs = int(keep.sum())
-        # rigid-only refit in the SCALED source frame (scale is frozen)
-        R_d, t_d = rigid_fit(s_f * (src[keep] @ R_f.T) + t_f,
-                             face_tgt[j[keep]])
-        R_f = R_d @ R_f
-        t_f = R_d @ t_f + t_d
-    cur = s_f * (src @ R_f.T) + t_f
-    d, _ = tree_face.query(cur, workers=-1)
-    d_in = d[d <= args.face_cap]
-    face_rms = float(np.sqrt((d_in[d_in <= np.quantile(d_in, 1.0 - args.face_trim)] ** 2).mean()))
-    print(f"[s3sg] face polish: {n_face_pairs} pairs  "
-          f"face inlier rms={face_rms:.3f} cm  scale={s_f:.4f}")
+
+    def face_polish(s_f, R_f, t_f):
+        """Rigid-only trimmed ICP of near-face SG points onto the fitted ICT
+        face. Returns (s,R,t, n_pairs, face_rms) or None if too few pairs."""
+        n_pairs = 0
+        for _ in range(args.face_iters):
+            cur = s_f * (src @ R_f.T) + t_f
+            d, j = tree_face.query(cur, workers=-1)
+            keep = d <= args.face_cap
+            if keep.sum() < 500:
+                return None
+            thr = np.quantile(d[keep], 1.0 - args.face_trim)
+            keep &= d <= thr
+            n_pairs = int(keep.sum())
+            # rigid-only refit in the SCALED source frame (scale frozen:
+            # a free scale against a partial template collapses)
+            R_d, t_d = rigid_fit(s_f * (src[keep] @ R_f.T) + t_f,
+                                 face_tgt[j[keep]])
+            R_f = R_d @ R_f
+            t_f = R_d @ t_f + t_d
+        d, _ = tree_face.query(s_f * (src @ R_f.T) + t_f, workers=-1)
+        d_in = d[d <= args.face_cap]
+        rms = float(np.sqrt((d_in[d_in <= np.quantile(
+            d_in, 1.0 - args.face_trim)] ** 2).mean()))
+        return s_f, R_f, t_f, n_pairs, rms
+
+    inner_lmk = fitted[lmk_verts[17:]]
+
+    def align_from(s0, R0, t0):
+        """Global trimmed ICP + rigid face polish; scored by the
+        direction-aware front-depth mean (NOT by ICP rms)."""
+        s_f, R_f, t_f, rms_f, it_f = icp_trimmed(
+            src, tgt_head, tree, s0, R0, t0,
+            iters=args.fine_iters, trim=args.trim)
+        pol = face_polish(s_f, R_f, t_f)
+        if pol is None:
+            return None
+        s_f, R_f, t_f, n_pairs, face_rms = pol
+        fd_err, fd_miss = front_depth_errors(
+            inner_lmk, s_f * (src @ R_f.T) + t_f)
+        fd = float(fd_err.mean()) if len(fd_err) else np.inf
+        return {"s": s_f, "R": R_f, "t": t_f, "global_rms": rms_f,
+                "iters": it_f, "n_pairs": n_pairs, "face_rms": face_rms,
+                "fd_mean": fd, "fd_miss": fd_miss}
+
+    # ---- primary init: IDENTITY rotation (TripoSG canonical frame is
+    # +Y-up / face-toward-+Z, measured), robust scale + anchor translation
+    def widths(v):
+        return np.percentile(v[:, 0], 95) - np.percentile(v[:, 0], 5)
+
+    def anchor(v):  # median x, crown y, nose z -- stable on both meshes
+        return np.array([np.median(v[:, 0]),
+                         np.percentile(v[:, 1], 98),
+                         np.percentile(v[:, 2], 98)])
+
+    s0 = widths(tgt_head) / max(widths(src), 1e-12)
+    t0 = anchor(tgt_head) - s0 * anchor(src)
+    print(f"[s3sg] identity init: s0={s0:.3f} t0={np.round(t0, 2)}")
+    result = align_from(s0, np.eye(3), t0)
+    init_used = "identity"
+    if result is not None:
+        print(f"[s3sg] identity path: global rms={result['global_rms']:.3f} "
+              f"cm  face rms={result['face_rms']:.3f} cm  front-depth mean="
+              f"{result['fd_mean']:.3f} cm (miss {result['fd_miss']})")
+
+    # ---- fallback: 24-rotation coarse sweep, only if identity fails the
+    # front-depth criterion
+    if result is None or result["fd_mean"] > args.max_front_err \
+            or result["fd_miss"] > 0:
+        print("[s3sg] identity init unsatisfying -- trying 24-rotation sweep")
+        mu_s, mu_t = src.mean(0), tgt_head.mean(0)
+        sig_s = float(np.linalg.norm(src - mu_s, axis=1).mean())
+        sig_t = float(np.linalg.norm(tgt_head - mu_t, axis=1).mean())
+        s0s = sig_t / max(sig_s, 1e-12)
+        best = None
+        for ci, R0 in enumerate(proper_rotations_24()):
+            t_init = mu_t - s0s * (R0 @ mu_s)
+            s_c, R_c, t_c, rms_c, _ = icp_trimmed(
+                src_c, tgt_head, tree, s0s, R0, t_init,
+                iters=args.coarse_iters, trim=0.30)
+            if best is None or rms_c < best[0]:
+                best = (rms_c, s_c, R_c, t_c, ci)
+        rms_c, s_b, R_b, t_b, ci = best
+        print(f"[s3sg] sweep coarse best: candidate #{ci} rms={rms_c:.3f} cm")
+        res_b = align_from(s_b, R_b, t_b)
+        if res_b is not None:
+            print(f"[s3sg] sweep path: front-depth mean={res_b['fd_mean']:.3f}"
+                  f" cm (miss {res_b['fd_miss']})")
+        if result is None or (res_b is not None
+                              and res_b["fd_mean"] < result["fd_mean"]):
+            result, init_used = res_b, f"sweep#{ci}"
+    if result is None:
+        die("no alignment path produced a usable transform")
+
+    s_f, R_f, t_f = result["s"], result["R"], result["t"]
+    inlier_rms = result["global_rms"]
+    n_face_pairs, face_rms = result["n_pairs"], result["face_rms"]
+    d_all, _ = tree.query(s_f * (src @ R_f.T) + t_f, workers=-1)
+    median_nn = float(np.median(d_all))
+    print(f"[s3sg] chosen init: {init_used}  scale={s_f:.4f}  "
+          f"face polish pairs={n_face_pairs} rms={face_rms:.3f} cm")
 
     # ---- final metrics on the full transform
     v_aligned = s_f * (v_raw @ R_f.T) + t_f
@@ -351,16 +409,15 @@ def main():
         failures.append(f"aligned SG y-extent ratio {y_ratio:.2f} is insane")
 
     info = {
-        "method": "slab-strip + icp-to-aligned-triposr (24-rot coarse init + "
-                  "trimmed umeyama ICP) + rigid face-polish vs fitted ICT face",
+        "method": "slab-strip + identity-init trimmed ICP vs SR head band "
+                  "(24-rot sweep fallback, chosen by front-depth) + rigid "
+                  "face-polish vs fitted ICT face",
         "target_npz": str(tgt_npz),
+        "init_used": init_used,
         "slab_strip": strip_info,
         "front_depth_mean_cm": fd_mean,
         "front_depth_max_cm": fd_max,
         "front_depth_missing": int(fd_miss),
-        "coarse_candidate": int(ci),
-        "coarse_rms_cm": float(rms_c),
-        "fine_iters_run": int(it_f),
         "trim": args.trim,
         "global_inlier_rms_cm": inlier_rms,
         "median_nn_cm": median_nn,
