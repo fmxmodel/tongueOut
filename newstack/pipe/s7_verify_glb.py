@@ -16,7 +16,8 @@ Parses the GLB binary header + JSON chunk directly (no deps) and checks:
   - every material is colored: baseColorTexture (head albedo, eye textures)
     OR COLOR_0 vertex colors (RestMat = the UDIM tile-1+ polygons)
   - every material is explicitly opaque: alphaMode == "OPAQUE" (explicit,
-    not defaulted -- s6 hardens this) and doubleSided is false/absent
+    not defaulted -- s6 hardens this) and doubleSided is true (ICT's winding
+    is inconsistent, so single-sided culling renders the head see-through)
 
 Exit code 0 = PASS. Writes out/export/verify_report.json.
 """
@@ -144,9 +145,10 @@ def main():
             fails.append(f"material {entry['name']}: alphaMode "
                          f"{entry['alphaMode']!r} != explicit 'OPAQUE' "
                          "(s6 hardening missing?)")
-        if entry["doubleSided"]:
-            fails.append(f"material {entry['name']}: doubleSided true -- "
-                         "single-sided opaque export expected")
+        if not entry["doubleSided"]:
+            fails.append(f"material {entry['name']}: doubleSided false -- "
+                         "double-sided expected (ICT winding is inconsistent, "
+                         "so single-sided culling renders the head see-through)")
         if images and not entry["textured"] and not entry["vertex_colored"]:
             fails.append(f"material {entry['name']}: neither baseColorTexture "
                          "nor COLOR_0 vertex colors")

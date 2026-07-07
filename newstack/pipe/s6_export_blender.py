@@ -28,17 +28,23 @@ cover the eyeball forward pole, so in an opaque export they'd hide the irises
 behind skin-textured lids. Their FACES are stripped (all 26719 verts stay;
 the exporter simply never references the loose ones). Eyelashes are kept.
 
-OPAQUE HARDENING (kills the see-through-head viewer artifact): every material
-is single-sided (use_backface_culling=True -> glTF doubleSided=false; the head
-and eyeballs are closed meshes) and the exported GLB's JSON is post-processed
-to carry an EXPLICIT "alphaMode": "OPAQUE" on every material. After export the
-GLB is re-imported into a fresh scene and each material is MEASURED for
+OPAQUE + DOUBLE-SIDED HARDENING (kills the see-through-head viewer artifact):
+the GLB's JSON is post-processed to carry an EXPLICIT "alphaMode":"OPAQUE" AND
+"doubleSided":true on every material. Double-sided is DELIBERATE: from_pydata
+inherits ICT's face winding, which is inconsistent (MEASURED: ~48% of the
+scalp/back/neck faces wind inward). A single-sided / backface-culling renderer
+(three.js honours doubleSided=false) then culls those inward front-faces and
+you see THROUGH the head into the interior -- a "translucent shell" that is
+really culling, not alpha. Rendering both sides makes the nearest opaque
+surface always win, so the head is solid regardless of winding. (Normals are
+also recomputed outward below for correct shading, but that alone doesn't make
+single-sided reliable on this topology, so we ship double-sided.) After export
+the GLB is re-imported into a fresh scene and each material is MEASURED for
 functional opacity (alpha socket unlinked & 1.0, surface_render_method
-DITHERED / blend_method not BLEND, backface culling on). NOTE (measured on
-Blender 4.2.3): Material.blend_method is a deprecated alias there -- even a
-factory-new material reads 'HASHED' and assigning 'OPAQUE' does not stick, so
-the check treats 'HASHED'+alpha==1.0+DITHERED as opaque (which it renders as)
-and FAILS on 'BLEND'/'BLENDED'/linked-alpha.
+DITHERED / blend_method not BLEND). NOTE (measured on Blender 4.2.3):
+Material.blend_method is a deprecated alias there -- even a factory-new
+material reads 'HASHED' and assigning 'OPAQUE' does not stick, so the check
+treats 'HASHED'+alpha==1.0+DITHERED as opaque and FAILS on 'BLEND'/linked-alpha.
 
 Axes/units: Blender coords = (x, -z, y) of ICT * 0.01. The glTF exporter's
 Z-up -> Y-up conversion is (x, z, -y), so GLB coords == ICT coords in meters:
@@ -71,7 +77,7 @@ def srgb_to_linear(c):
 
 
 def harden_opaque_props(mat):
-    mat.use_backface_culling = True  # -> glTF doubleSided=false
+    mat.use_backface_culling = False  # -> glTF doubleSided=true (see harden note)
     for attr, val in (("blend_method", "OPAQUE"),
                       ("surface_render_method", "DITHERED"),
                       ("show_transparent_back", False)):
@@ -118,7 +124,7 @@ def make_opaque_tex_material(name, img_path, roughness):
 
 def harden_glb_opaque(glb_path):
     """Rewrite the GLB's JSON chunk in place: every material gets an EXPLICIT
-    alphaMode OPAQUE and doubleSided false. stdlib-only, 4-byte aligned."""
+    alphaMode OPAQUE and doubleSided TRUE. stdlib-only, 4-byte aligned."""
     import struct
     data = Path(glb_path).read_bytes()
     magic, version, _ = struct.unpack_from("<III", data, 0)
@@ -131,8 +137,8 @@ def harden_glb_opaque(glb_path):
         if m.get("alphaMode") != "OPAQUE":
             m["alphaMode"] = "OPAQUE"
             changed.append(m.get("name", "?"))
-        if m.get("doubleSided"):
-            m["doubleSided"] = False
+        if not m.get("doubleSided"):
+            m["doubleSided"] = True
             changed.append(m.get("name", "?") + ":doubleSided")
     payload = json.dumps(gltf, separators=(",", ":")).encode("utf-8")
     payload += b" " * (-len(payload) % 4)  # spaces pad JSON chunks (spec)
@@ -175,11 +181,15 @@ def reimport_opacity_check(glb_path):
             "alpha_unlinked_and_1": bool(alpha_ok),
             "show_transparent_back": getattr(m, "show_transparent_back", None),
         }
+        # NB: backface_culling is intentionally NOT required -- we export
+        # doubleSided=true (use_backface_culling=False). ICT's mesh has
+        # inconsistent face winding (~half the scalp/back faces inward); a
+        # single-sided/culling render then culls those front faces and the head
+        # looks see-through. Double-sided draws both sides -> always solid.
         entry["opaque"] = bool(
             alpha_ok
             and entry["blend_method"] != "BLEND"
-            and entry["surface_render_method"] in (None, "DITHERED")
-            and entry["backface_culling"])
+            and entry["surface_render_method"] in (None, "DITHERED"))
         ok &= entry["opaque"]
         results.append(entry)
         print(f"[s6] reimport-check {m.name}: blend_method="
@@ -396,8 +406,8 @@ def main():
     # explicit alphaMode OPAQUE + doubleSided false, measured in the file
     gltf_json = harden_glb_opaque(glb_path)
     for m in gltf_json.get("materials", []):
-        assert m.get("alphaMode") == "OPAQUE" and not m.get("doubleSided"), \
-            f"material {m.get('name')} not hardened opaque -- STOP"
+        assert m.get("alphaMode") == "OPAQUE" and m.get("doubleSided"), \
+            f"material {m.get('name')} not opaque+doubleSided -- STOP"
 
     blend_path = od / f"{args.name}.blend"
     bpy.ops.wm.save_as_mainfile(filepath=str(blend_path), compress=True)
