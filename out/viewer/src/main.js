@@ -76,9 +76,10 @@ controls.enableDamping = true;
 controls.minDistance = 0.12;
 controls.maxDistance = 3;
 
-// Lighting: hemisphere ambient + key/fill/rim so the opaque head reads solid from all
-// angles even without an environment map (kept dependency-light — no RoomEnvironment).
-scene.add(new THREE.HemisphereLight(0xffffff, 0x30343f, 1.15));
+// Lighting: hemisphere ambient + key/fill/rim/chin so the opaque head reads solid from
+// all angles even without an environment map (kept dependency-light — no RoomEnvironment).
+// Ground bounce warmed + lifted so the concave under-jaw/neck isn't a dark shadow band.
+scene.add(new THREE.HemisphereLight(0xffffff, 0x4b463f, 1.2));
 const key = new THREE.DirectionalLight(0xffffff, 1.7);
 key.position.set(0.6, 0.9, 1.2);
 scene.add(key);
@@ -88,6 +89,11 @@ scene.add(fill);
 const rim = new THREE.DirectionalLight(0xffffff, 0.7);
 rim.position.set(-0.3, 0.4, -1.2);
 scene.add(rim);
+// Soft up-fill (clamshell kicker) from front-below to lift the under-chin/neck, which
+// no key/fill reaches -> that is the "dark band" under the jaw in the viewer, not texture.
+const chin = new THREE.DirectionalLight(0xfff2e6, 0.45);
+chin.position.set(0.0, -0.9, 1.0);
+scene.add(chin);
 
 // headRoot receives optional MediaPipe head-pose rotation; the GLB is recentered into
 // it so rotation pivots about the head's own centre.
