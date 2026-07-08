@@ -39,11 +39,15 @@ One diffuse map, no statistical/NC albedo prior:
           TripoSR contributes its LUMINANCE variation (shading detail) plus
           its LOCAL CHROMA DEVIATION about the zone mean (--hair-chroma),
           sampled with a sharper k-NN (--hair-knn, default 2 vs 8 elsewhere)
-          so the crown has tonal variation, not a flat brown. Feathered below
-          the hairline / around the ears. Finally a controlled SATURATION
-          lift (--back-sat) counters the residual desaturation over the
-          hair/back zone (feathered by backfacing-ness, so the photo-lit
-          front is untouched).
+          so the crown has tonal variation, not a flat brown. The luma ratio
+          is anchored on the APPLIED (photo-hidden) zone -- a visible-cap
+          anchor rails the ratio at its clamp and lightens the crown to pale
+          tan (MEASURED: TripoSR paints the hidden crown brighter than the
+          visible cap). Feathered below the hairline / around the ears.
+          Finally a controlled SATURATION lift (--back-sat) on the TRANSFER
+          fill, feathered by backfacing-ness (the photo-lit front is
+          untouched; the measured cap palette already carries real hair
+          saturation, so it is exempt), counters the residual desaturation.
   MIRROR  exterior texels with neither photo nor clay try the X-mirrored
           position through the same camera (faces are ~symmetric; person-mask
           enforced there too) before falling back to inpaint.
@@ -475,6 +479,20 @@ def main():
             _, cs = sample_clay(ctree, ccols, pos[hz], args.hair_knn)
             clay_sharp = clay_raw.copy()
             clay_sharp[hz] = cs
+        # saturation lift on the TRANSFER fill, weighted by backfacing-ness
+        # (the photo-lit front is untouched; at the jaw feather the fill is
+        # palette-matched and w_back ramps from 0, so no chroma step appears
+        # at the seam): counters the residual desaturation of TripoSR's
+        # hallucinated palette. Applied BEFORE the cap blend -- the cap
+        # palette is measured from the photo and already carries real hair
+        # saturation; lifting it too would overshoot into orange.
+        if args.back_sat != 1.0:
+            w_back = smoothstep(-ndotv, 0.0, 0.25)
+            lum_cc = clay_col @ LUM_W
+            sat = 1.0 + (args.back_sat - 1.0) * w_back
+            clay_col = np.clip(lum_cc[:, None]
+                               + sat[:, None] * (clay_col - lum_cc[:, None]),
+                               0.0, 1.0)
         if not args.no_cap_match:
             cpair = ((reg <= 1) & clay_ok & (w_photo >= args.cap_min_w)
                      & (w_cap > 0.5))
@@ -490,7 +508,18 @@ def main():
                 band = (lum_p >= q20) & (lum_p <= q50)
                 cap_mu_p = pc_pair[band].mean(0)
                 lum = clay_sharp @ LUM_W
-                cap_mu_lc = float(max(lum[cpair].mean(), 1e-6))
+                zone = clay_ok & (w_cap > 0.5)
+                # anchor the luma ratio on the APPLIED zone, not the photo-
+                # visible cap: MEASURED, TripoSR paints the hidden crown
+                # systematically BRIGHTER than the visible cap (visible-cap
+                # anchor 0.444 vs hidden-zone luma ~0.6+), so a visible-cap
+                # anchor rails the ratio at the 1.4 clamp and lightens the
+                # whole crown to pale tan (1.4 * photo_hair_mu). Zone
+                # anchoring centers the ratio at ~1.0 -> the crown MEAN lands
+                # on the measured photo hair and TripoSR contributes only
+                # the luminance VARIATION, as intended.
+                cap_mu_lc = float(max(lum[zone].mean() if zone.any()
+                                      else lum[cpair].mean(), 1e-6))
                 ratio = np.clip(lum / cap_mu_lc, 0.6, 1.4)
                 cap_mapped = cap_mu_p[None] * ratio[:, None]
                 if args.hair_chroma > 0:
@@ -499,7 +528,6 @@ def main():
                     # base hue stays the measured photo hair; the deviation
                     # adds the crown's tonal variation instead of a flat fill)
                     dev = clay_sharp - lum[:, None]
-                    zone = clay_ok & (w_cap > 0.5)
                     cap_dev_mu = (dev[zone].mean(0) if zone.any()
                                   else dev[cpair].mean(0))
                     cap_mapped = cap_mapped + args.hair_chroma * (dev - cap_dev_mu)
@@ -523,18 +551,6 @@ def main():
                             "reason": f"cap pairs < {args.cap_min_pairs}"}
         else:
             cap_info = {"applied": False, "reason": "--no-cap-match"}
-        # controlled saturation lift over the hair/back zone (feathered by
-        # backfacing-ness so the photo-lit front is untouched): counters the
-        # residual desaturation of TripoSR's hallucinated palette. Applied to
-        # the FILL only -- at the jaw feather the fill is palette-matched and
-        # w_back ramps from 0, so no chroma step appears at the seam.
-        if args.back_sat != 1.0:
-            w_back = np.maximum(w_cap, smoothstep(-ndotv, 0.0, 0.25))
-            lum_cc = clay_col @ LUM_W
-            sat = 1.0 + (args.back_sat - 1.0) * w_back
-            clay_col = np.clip(lum_cc[:, None]
-                               + sat[:, None] * (clay_col - lum_cc[:, None]),
-                               0.0, 1.0)
         print(f"[s5] clay-fillable texels: {int(clay_ok.sum())}; "
               f"palette match: {match_info}; cap match: {cap_info}; "
               f"back-sat lift: {args.back_sat}")
@@ -743,6 +759,13 @@ def main():
             _, cs_v = sample_clay(ctree, ccols, pos_v[hz_v], args.hair_knn)
             sharp_v = ccol_raw_v.copy()
             sharp_v[hz_v] = cs_v
+        if args.back_sat != 1.0:  # transfer-fill sat lift, before the cap
+            w_back_v = smoothstep(-nv_v[ext_v], 0.0, 0.25)
+            lum_cv = ccol_v @ LUM_W
+            sat_v = 1.0 + (args.back_sat - 1.0) * w_back_v
+            ccol_v = np.clip(lum_cv[:, None]
+                             + sat_v[:, None] * (ccol_v - lum_cv[:, None]),
+                             0.0, 1.0)
         if cap_info.get("applied"):
             lum_v = sharp_v @ LUM_W
             ratio_v = np.clip(lum_v / cap_mu_lc, 0.6, 1.4)
@@ -753,14 +776,6 @@ def main():
             cap_v = np.clip(cap_v, 0.0, 1.0)
             ccol_v = ((1.0 - w_cap_v[:, None]) * ccol_v
                       + w_cap_v[:, None] * cap_v)
-        if args.back_sat != 1.0:
-            w_back_v = np.maximum(w_cap_v,
-                                  smoothstep(-nv_v[ext_v], 0.0, 0.25))
-            lum_cv = ccol_v @ LUM_W
-            sat_v = 1.0 + (args.back_sat - 1.0) * w_back_v
-            ccol_v = np.clip(lum_cv[:, None]
-                             + sat_v[:, None] * (ccol_v - lum_cv[:, None]),
-                             0.0, 1.0)
         near = dist_v < args.clay_max_dist
         tmp = vcol[ext_v]
         tmp[near] = ccol_v[near]
