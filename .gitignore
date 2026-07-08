@@ -39,3 +39,10 @@ venv/
 out/blender_local.log
 out/viewer_dev.log
 out/viewer_dev_5174.log
+inputs/multiview/
+Screenshot from *.png
+/Screenshot*.png
+
+# real-subject input photos (biometric) -- keep out of the public repo
+inputs/
+Screenshot from *.png
