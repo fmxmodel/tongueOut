@@ -1,30 +1,30 @@
 #!/usr/bin/env bash
 # =============================================================================
-# newstack fusion pipeline: single photo -> commercial GLB (ICT Light, MIT)
-# with hair volume (TripoSR clay), photo texture, ARKit-52 morph targets
+# newstack fusion pipeline — SIMPLIFIED: TripoSR-only pipeline
+#
+# Single photo -> commercial GLB (ICT Light, MIT)
+# With hair volume (TripoSR clay), TripoSR vertex colors, ARKit-52 morph targets
 # (51 from ICT expression OBJs + tongueOut synthesized from ICT's real
 # static tongue geometry -- see pipe/tongue_synth.py).
 #
+# Removed: TripoSG, TRELLIS, photo-projection texture, multi-source blending
+# Color source: TripoSR vertex colors only (simple k-NN bake to ICT UVs)
+#
 # Pod layout (defaults; override via env):
-#   pipe scripts   /workspace/newstack/pipe
-#   ICT-FaceKit    /workspace/newstack/ICT-FaceKit    (FaceXModel only, MIT)
+#   pipe scripts   /workspace/newstack/pipe        (or /workspace/newARC/newstack/pipe)
+#   ICT-FaceKit    /workspace/newstack/ICT-FaceKit (FaceXModel only, MIT)
 #   TripoSR clay   /workspace/newstack/out_triposr/0/mesh.obj
 #   photo          /workspace/inputs/random-person.jpeg
 #   outputs        /workspace/newstack/out
 #
 # Usage:
-#   bash /workspace/newstack/pipe/../run_newstack.sh          # all stages
-#   STAGES="4 5 6 7" bash run_newstack.sh                     # rerun from rig
-#   REFINE=0 bash run_newstack.sh                             # skip clay (A/B)
+#   bash /workspace/newstack/run_newstack.sh             # all stages
+#   STAGES="4 5 6 7" bash run_newstack.sh                # rerun from rig
 #   TEX_SIZE=2048 DRACO=1 bash run_newstack.sh
-#   STAGES="3d" bash run_newstack.sh                          # TRELLIS color clay
-#   CLAY_COLOR=triposr STAGES="5 6 7 8" bash run_newstack.sh  # legacy TripoSR
-#                                # colors (A/B baseline; default is trellis)
 #
 # Stages: 1 landmarks | 2 identity fit | 3 clay align + shrinkwrap refine
-#         3d TRELLIS colored clay (s5 color source for CLAY_COLOR=trellis)
-#         4 ARKit shapes | 5 texture bake | 6 Blender GLB export | 7 verify
-#         8 render proof images from the GLB (front/back/eye close-ups)
+#         4 ARKit shapes | 5 texture bake (TripoSR only) | 6 Blender GLB export
+#         7 verify | 8 render proof images from the GLB
 # Every stage is independently rerunnable; artifacts live under $OUT/<stage>/.
 # =============================================================================
 set -euo pipefail
@@ -45,41 +45,17 @@ BLENDER=${BLENDER:-/workspace/blender/blender-4.2.3-linux-x64/blender}
 PHOTO=${PHOTO:-/workspace/inputs/random-person.jpeg}
 ICT=${ICT:-$ROOT/ICT-FaceKit}
 CLAY=${CLAY:-$ROOT/out_triposr/0/mesh.obj}
-CLAY_SG=${CLAY_SG:-$ROOT/out_triposg/random-person_triposg_300k.glb}
 MP_TASK=${MP_TASK:-/workspace/models/mediapipe/face_landmarker.task}
 
-STAGES=${STAGES:-"1 2 3 3d 4 5 6 7"}
-REFINE=${REFINE:-1}          # 0 = skip clay align + shrinkwrap (pure ICT fit)
-CLAY_SOURCE=${CLAY_SOURCE:-triposr}  # triposr | triposg (sharper geometry;
-                             # TripoSR still runs -- ICP target + s5 colors)
-CLAY_COLOR=${CLAY_COLOR:-trellis}    # trellis | triposr : which colored clay
-                             # s5 samples. Default trellis (stage 3d output;
-                             # MEASURED better: real 360 hair structure,
-                             # recolored to the subject's photo hair).
-                             # triposr = legacy palette, kept for A/B --
-                             # byte-identical to the pre-TRELLIS build.
-TRELLIS_DIR=${TRELLIS_DIR:-$ROOT/out_trellis}
+STAGES=${STAGES:-"1 2 3 4 5 6 7"}
+
 TEX_SIZE=${TEX_SIZE:-1024}
 DRACO=${DRACO:-0}
-S2_ARGS=${S2_ARGS:-}         # e.g. "--lam-id 0.1 --iters2 1200"
-S3A_ARGS=${S3A_ARGS:-}       # e.g. "--force-bbox --fallback-up z_up"
-S3SG_ARGS=${S3SG_ARGS:-}     # e.g. "--max-rms 1.0"
-S3D_ARGS=${S3D_ARGS:-}       # e.g. "--n-dense 150000 --max-ref-med 1.5"
-S3B_ARGS=${S3B_ARGS:-}       # e.g. "--max-disp 4 --face-weight 0.2"
-S3C_ARGS=${S3C_ARGS:-}       # e.g. "--max-reproj 25"
-S5_ARGS=${S5_ARGS:-}         # e.g. "--no-expression"
-
-# TripoSG path: sharp geometry-only clay. Region-weighted shrinkwrap: the FACE
-# takes the TripoSG shape (weight 1.0, feathered to 0 over head/neck), the
-# cranium/back stays clean ICT; bbox volume-match (prescale) closes the
-# bald-ICT vs haired-clay size gap first. Overridable via S3B_ARGS (last wins).
-# prescale=yz (NOT x): the x factor is hair-width driven and inflates the jaw
-# sideways into the hair shell (measured +2.4cm at the jaw contour -> 84px
-# contour reprojection); y/z close the volume gap without lateral face drift.
-S3B_SG_FLAGS="--weights face --prescale yz
-  --clay-smooth-iters 6 --clay-smooth-factor 0.4
-  --smooth-iters 6 --smooth-lam 0.5
-  --protect-r0 1.0 --protect-r1 2.5 --nose-r0 0.3 --nose-r1 1.0"
+S2_ARGS=${S2_ARGS:-}
+S3A_ARGS=${S3A_ARGS:-}
+S3B_ARGS=${S3B_ARGS:-}
+S3C_ARGS=${S3C_ARGS:-}
+S5_ARGS=${S5_ARGS:-}
 
 export PYTHONUNBUFFERED=1
 mkdir -p "$OUT/logs"
@@ -104,9 +80,8 @@ log_run() {  # log_run <tag> <cmd...>
 }
 
 # Which neutral feeds the rig: refined (clay-fused) or fitted (pure ICT).
-if [ "$REFINE" = "1" ]; then
-  NEUTRAL="$OUT/refine/refined_neutral.npy"
-else
+NEUTRAL="$OUT/refine/refined_neutral.npy"
+if [ ! -f "$NEUTRAL" ]; then
   NEUTRAL="$OUT/fit/fitted_neutral.npy"
 fi
 
@@ -122,37 +97,13 @@ if want 2; then
 fi
 
 if want 3; then
-  if [ "$REFINE" = "1" ]; then
-    # TripoSR landmark alignment ALWAYS runs: it is the s5 color source and
-    # (for the triposg path) the ICP target.
-    # shellcheck disable=SC2086
-    log_run s3a "$PY" "$PIPE/s3a_align_clay.py" \
-        --clay "$CLAY" --task "$MP_TASK" --out "$OUT" $S3A_ARGS
-    if [ "$CLAY_SOURCE" = "triposg" ]; then
-      # shellcheck disable=SC2086
-      log_run s3sg "$PY" "$PIPE/s3a_align_triposg.py" \
-          --clay-sg "$CLAY_SG" --task "$MP_TASK" --out "$OUT" $S3SG_ARGS
-      # shellcheck disable=SC2086
-      log_run s3b blender_run "$PIPE/s3b_refine_blender.py" --out "$OUT" \
-          --clay-npz "$OUT/clay/clay_sg_aligned.npz" $S3B_SG_FLAGS $S3B_ARGS
-    else
-      # shellcheck disable=SC2086
-      log_run s3b blender_run "$PIPE/s3b_refine_blender.py" --out "$OUT" $S3B_ARGS
-    fi
-    # shellcheck disable=SC2086
-    log_run s3c "$PY" "$PIPE/s3c_verify_refine.py" --out "$OUT" $S3C_ARGS
-  else
-    echo "=== [s3] REFINE=0 -- skipping clay align + shrinkwrap ==="
-  fi
-fi
-
-if want 3d; then
-  # TRELLIS colored clay: UV-sampled + densified point cloud, landmark-
-  # aligned into ICT space (gated). Only a COLOR source for s5
-  # (CLAY_COLOR=trellis); never touches geometry or topology.
   # shellcheck disable=SC2086
-  log_run s3d "$PY" "$PIPE/s3d_trellis_clay.py" \
-      --trellis-dir "$TRELLIS_DIR" --task "$MP_TASK" --out "$OUT" $S3D_ARGS
+  log_run s3a "$PY" "$PIPE/s3a_align_clay.py" \
+      --clay "$CLAY" --task "$MP_TASK" --out "$OUT" $S3A_ARGS
+  # shellcheck disable=SC2086
+  log_run s3b blender_run "$PIPE/s3b_refine_blender.py" --out "$OUT" $S3B_ARGS
+  # shellcheck disable=SC2086
+  log_run s3c "$PY" "$PIPE/s3c_verify_refine.py" --out "$OUT" $S3C_ARGS
 fi
 
 if want 4; then
@@ -161,27 +112,11 @@ if want 4; then
 fi
 
 if want 5; then
-  S5_CLAY=()
-  if [ "$CLAY_COLOR" = "trellis" ]; then
-    # TRELLIS palette is MEASURED dark (back luma ~0.15 vs photo hair 0.41):
-    # rank-matched cap luma (hue+brightness = measured photo hair, rank/
-    # structure = TRELLIS) + hair-likeness extension down the neck (TRELLIS
-    # paints the subject's long hair past the geometric nape band) + widened
-    # ratio clamps so the high-contrast structure survives. clay-max-dist 10:
-    # the TRELLIS hair shell sits up to 7.4 cm off the ICT skull back
-    # (MEASURED; 6 left a skin_mean hole). back-sat off: the TripoSR
-    # desaturation this lift counters does not exist in TRELLIS's real
-    # chroma (1.35 turned the ears neon). TripoSR path untouched.
-    S5_CLAY=(--clay-ply "$OUT/clay/clay_trellis_aligned.ply"
-             --cap-luma dist --hair-extend
-             --cap-ratio-lo 0.4 --cap-ratio-hi 1.8
-             --clay-max-dist 10 --back-sat 1.0)
-  elif [ "$CLAY_COLOR" != "triposr" ]; then
-    echo "[FATAL] CLAY_COLOR=$CLAY_COLOR is not triposr|trellis" >&2; exit 1
-  fi
-  # shellcheck disable=SC2086
+  # SIMPLIFIED: TripoSR-only texture bake. No photo projection, no TRELLIS,
+  # no multi-source blending. TripoSR vertex colors sampled at each texel
+  # 3D position via k-NN, with interior defaults + eye textures.
   log_run s5 "$PY" "$PIPE/s5_bake_texture.py" \
-      --out "$OUT" --size "$TEX_SIZE" ${S5_CLAY[@]+"${S5_CLAY[@]}"} $S5_ARGS
+      --out "$OUT" --size "$TEX_SIZE" $S5_ARGS
 fi
 
 if want 6; then
