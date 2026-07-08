@@ -19,19 +19,31 @@ One diffuse map, no statistical/NC albedo prior:
   BACK    TripoSR clay vertex colors (its 360-degree hallucination: real hair/
           skin tone) sampled at each texel's 3D position via k-NN inverse-
           distance average over the aligned clay (dense: ~0.15 cm spacing),
-          then PALETTE-MATCHED to the photo with a per-channel affine map
-          fitted (residual-trimmed) on texels where photo AND clay overlap --
-          so TripoSR's washed-out palette lands on the photo's palette and the
-          hairline/jaw blend has no color step. The HAIR ZONE (scalp cap
-          above the hairline + skull back above ear level, both measured from
-          the fitted landmarks) is special: MEASURED, TripoSR hallucinates
-          the hidden crown desaturated grey-beige, out-of-distribution vs ALL
-          photo-visible clay (its chroma is even inverted), so no fitted
-          distribution transfer can recover hair from it. There the palette
-          comes from the MEASURED photo hair (mean color of cap texels the
-          photo does see -- real hair; or scalp skin if bald, which
-          self-corrects) and TripoSR contributes only its LUMINANCE variation
-          (shading detail). Feathered below the hairline / around the ears.
+          then PALETTE-MATCHED to the photo in a LUMA/CHROMA decomposition
+          (--clay-transfer lumachroma, the default): luma gets a residual-
+          trimmed affine fit onto the photo's luma over texels where photo AND
+          clay overlap (brightness lands right -> no hairline/jaw step), while
+          CHROMA is PRESERVED -- scaled per channel by the photo/clay chroma
+          std ratio, not replaced -- so the clay's per-vertex color variation
+          (the illusion of strands/shading) survives instead of being
+          flattened by the legacy per-channel RGB affine (--clay-transfer
+          affine, kept for A/B; MEASURED gain ~[0.96,0.90,0.94] = desaturate).
+          The HAIR ZONE (scalp cap above the hairline + skull back above ear
+          level, both measured from the fitted landmarks) is special:
+          MEASURED, TripoSR hallucinates the hidden crown desaturated
+          grey-beige, out-of-distribution vs ALL photo-visible clay (its
+          chroma is even inverted), so no fitted distribution transfer can
+          recover the hair BASE color from it. There the base palette comes
+          from the MEASURED photo hair (mean color of cap texels the photo
+          does see -- real hair; or scalp skin if bald, which self-corrects);
+          TripoSR contributes its LUMINANCE variation (shading detail) plus
+          its LOCAL CHROMA DEVIATION about the zone mean (--hair-chroma),
+          sampled with a sharper k-NN (--hair-knn, default 2 vs 8 elsewhere)
+          so the crown has tonal variation, not a flat brown. Feathered below
+          the hairline / around the ears. Finally a controlled SATURATION
+          lift (--back-sat) counters the residual desaturation over the
+          hair/back zone (feathered by backfacing-ness, so the photo-lit
+          front is untouched).
   MIRROR  exterior texels with neither photo nor clay try the X-mirrored
           position through the same camera (faces are ~symmetric; person-mask
           enforced there too) before falling back to inpaint.
@@ -76,6 +88,7 @@ REGION_BOUNDS = np.array([ICT_REGIONS["face"][1], ICT_REGIONS["head_neck"][1],
 COL_TEETH = np.array([0.85, 0.82, 0.75])
 COL_SCLERA = np.array([0.93, 0.92, 0.90])
 COL_MOUTH = np.array([0.40, 0.18, 0.16])
+LUM_W = np.array([0.299, 0.587, 0.114])  # Rec.601 luma
 
 
 def build_person_mask(photo, tol, erode_px, blur_sigma):
@@ -152,14 +165,77 @@ def fit_clay_to_photo(clay_c, photo_c, trim, min_pairs=2000):
                   "offset": np.round(b, 3).tolist()}
 
 
+def fit_clay_luma_chroma(clay_c, photo_c, trim, min_pairs=2000):
+    """Chroma-PRESERVING clay->photo transfer (the --clay-transfer lumachroma
+    default). The legacy per-channel RGB affine flattens TripoSR's already-
+    washed palette further (measured gain ~[0.96,0.90,0.94] -> desaturation).
+    Here the color is decomposed into luma (Rec.601) + chroma (RGB - luma):
+      LUMA    residual-trimmed affine LSQ onto the photo's luma over the
+              overlap texels -- brightness lands on the photo's, so the
+              hairline/jaw feather still has no brightness step;
+      CHROMA  kept from the clay, scaled per channel by the photo/clay chroma
+              std ratio (clamped [0.5, 3.5]) + mean-offset onto the photo's
+              chroma -- TripoSR's per-vertex color VARIATION survives and is
+              amplified to photo-like saturation instead of being flattened.
+    Falls back to no-op (params None) when the overlap is too small."""
+    n = int(len(clay_c))
+    if n < min_pairs:
+        return None, {"applied": False, "mode": "lumachroma", "pairs": n,
+                      "reason": f"pairs < {min_pairs}"}
+    x, y = clay_c @ LUM_W, photo_c @ LUM_W
+    coef = np.array([1.0, 0.0])
+    for _ in range(2):
+        A = np.stack([x, np.ones_like(x)], axis=1)
+        coef, *_ = np.linalg.lstsq(A, y, rcond=None)
+        r = np.abs(A @ coef - y)
+        keep = r <= np.quantile(r, 1.0 - trim)
+        x, y = x[keep], y[keep]
+    aL = float(np.clip(coef[0], 0.4, 2.5))
+    bL = float(np.mean(y) - aL * np.mean(x))
+    dev_c = clay_c - (clay_c @ LUM_W)[:, None]
+    dev_p = photo_c - (photo_c @ LUM_W)[:, None]
+    g, o = np.ones(3), np.zeros(3)
+    for ch in range(3):
+        g[ch] = np.clip(float(dev_p[:, ch].std())
+                        / max(float(dev_c[:, ch].std()), 1e-6), 0.5, 3.5)
+        o[ch] = float(dev_p[:, ch].mean()) - g[ch] * float(dev_c[:, ch].mean())
+    params = {"aL": aL, "bL": bL, "g": g, "o": o}
+    return params, {"applied": True, "mode": "lumachroma", "pairs": n,
+                    "luma_gain": round(aL, 3), "luma_offset": round(bL, 3),
+                    "chroma_gain": np.round(g, 3).tolist(),
+                    "chroma_offset": np.round(o, 3).tolist()}
+
+
+def apply_luma_chroma(params, c):
+    lum = c @ LUM_W
+    dev = c - lum[:, None]
+    lum_m = params["aL"] * lum + params["bL"]
+    return np.clip(lum_m[:, None] + dev * params["g"] + params["o"], 0.0, 1.0)
+
+
+def sat_metrics(c):
+    """HSV-style saturation + chroma-magnitude stats (the flat-vs-detailed
+    back proof: mean_sat = how colorful, chroma_std = tonal variation)."""
+    if len(c) == 0:
+        return {"mean_sat": None, "chroma_mean": None, "chroma_std": None}
+    mx, mn = c.max(axis=1), c.min(axis=1)
+    dev = np.linalg.norm(c - (c @ LUM_W)[:, None], axis=1)
+    return {"mean_sat": float(((mx - mn) / np.maximum(mx, 1e-6)).mean()),
+            "chroma_mean": float(dev.mean()), "chroma_std": float(dev.std())}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--out", default=P.OUT)
     ap.add_argument("--size", type=int, default=1024)
     ap.add_argument("--no-expression", action="store_true",
                     help="project onto the neutral instead of the expressed fit")
-    ap.add_argument("--ndotv-lo", type=float, default=0.15)
-    ap.add_argument("--ndotv-hi", type=float, default=0.50)
+    ap.add_argument("--ndotv-lo", type=float, default=0.08,
+                    help="photo feather start (cos of the grazing angle); "
+                         "0.08/0.60 spans ~53..85 deg -- a wide soft band so "
+                         "the jaw/hairline photo->clay transition never reads "
+                         "as a stripe (was 0.15/0.50)")
+    ap.add_argument("--ndotv-hi", type=float, default=0.60)
     ap.add_argument("--zbuf-eps", type=float, default=0.4, help="cm depth tolerance")
     ap.add_argument("--zbuf-max-px", type=int, default=1200)
     ap.add_argument("--clay-max-dist", type=float, default=6.0,
@@ -180,10 +256,30 @@ def main():
                     help="color distance to the border median that counts as "
                          "backdrop candidate")
     ap.add_argument("--bg-erode-px", type=int, default=3)
-    ap.add_argument("--bg-blur-sigma", type=float, default=2.0)
+    ap.add_argument("--bg-blur-sigma", type=float, default=3.0,
+                    help="person-mask feather; 3.0 = softer silhouette edge "
+                         "(was 2.0)")
     ap.add_argument("--no-clay-match", action="store_true",
-                    help="skip the affine clay->photo palette match (raw "
+                    help="skip the clay->photo palette transfer entirely (raw "
                          "TripoSR colors are measurably washed out)")
+    ap.add_argument("--clay-transfer", choices=("lumachroma", "affine"),
+                    default="lumachroma",
+                    help="lumachroma (default) matches the clay's LUMA to the "
+                         "photo but PRESERVES+rescales the clay's per-vertex "
+                         "chroma (hair keeps color variation); affine is the "
+                         "legacy per-channel RGB fit (desaturates, kept for A/B)")
+    ap.add_argument("--hair-knn", type=int, default=2,
+                    help="sharper k-NN for clay sampling inside the hair zone "
+                         "(k=2 keeps strand-scale tonal detail; elsewhere "
+                         "--clay-knn=8 denoises)")
+    ap.add_argument("--hair-chroma", type=float, default=1.2,
+                    help="scale of TripoSR's LOCAL chroma deviation (about the "
+                         "hair-zone mean) added to the photo-hair base color "
+                         "in the hair zone; 0 = legacy flat palette")
+    ap.add_argument("--back-sat", type=float, default=1.35,
+                    help="saturation lift over the hair/back zone (feathered "
+                         "by backfacing-ness; counters the residual TripoSR "
+                         "desaturation); 1.0 = off")
     ap.add_argument("--match-min-w", type=float, default=0.4,
                     help="min photo weight for a texel to join the palette fit")
     ap.add_argument("--match-trim", type=float, default=0.2,
@@ -314,7 +410,7 @@ def main():
     # ---- TripoSR clay fill (hair + back/sides of head), palette-matched
     clay_col = np.zeros_like(photo_col)
     clay_ok = np.zeros(K, dtype=bool)
-    gain, offs = np.ones(3), np.zeros(3)
+    gain, offs, lc_params = np.ones(3), np.zeros(3), None
     match_info = {"applied": False, "reason": "no clay"}
     cap_info = {"applied": False, "reason": "no clay"}
     ctree, ccols = None, None
@@ -331,10 +427,16 @@ def main():
         clay_col = clay_raw
         if not args.no_clay_match:
             pairs = (reg <= 1) & clay_ok & (w_photo >= args.match_min_w)
-            gain, offs, match_info = fit_clay_to_photo(
-                clay_raw[pairs], photo_col[pairs], args.match_trim)
-            if match_info["applied"]:
-                clay_col = np.clip(clay_raw * gain + offs, 0.0, 1.0)
+            if args.clay_transfer == "lumachroma":
+                lc_params, match_info = fit_clay_luma_chroma(
+                    clay_raw[pairs], photo_col[pairs], args.match_trim)
+                if lc_params is not None:
+                    clay_col = apply_luma_chroma(lc_params, clay_raw)
+            else:
+                gain, offs, match_info = fit_clay_to_photo(
+                    clay_raw[pairs], photo_col[pairs], args.match_trim)
+                if match_info["applied"]:
+                    clay_col = np.clip(clay_raw * gain + offs, 0.0, 1.0)
         # hair-zone palette (see module docstring): MEASURED, no fitted
         # distribution transfer can rescue TripoSR's hidden-crown grey-beige
         # (a global affine barely moves it; mean/std amplified its INVERTED
@@ -362,9 +464,17 @@ def main():
                          * smoothstep(z_ear + 3.0 - p[:, 2], 0.0, 2.0))
             return np.maximum(crown, above_ear)
 
-        LUM_W = np.array([0.299, 0.587, 0.114])
-        cap_mu_p, cap_mu_lc = None, None
+        cap_mu_p, cap_mu_lc, cap_dev_mu = None, None, None
         w_cap = hair_zone_w(pos)
+        # sharper k-NN inside the hair zone: k=8 averages away the strand-
+        # scale tonal variation that sells hair; k=2 keeps it (denoise stays
+        # k=8 everywhere else).
+        clay_sharp = clay_raw
+        hz = w_cap > 0.0
+        if args.hair_knn != args.clay_knn and hz.any():
+            _, cs = sample_clay(ctree, ccols, pos[hz], args.hair_knn)
+            clay_sharp = clay_raw.copy()
+            clay_sharp[hz] = cs
         if not args.no_cap_match:
             cpair = ((reg <= 1) & clay_ok & (w_photo >= args.cap_min_w)
                      & (w_cap > 0.5))
@@ -379,26 +489,55 @@ def main():
                 q20, q50 = np.quantile(lum_p, [0.2, 0.5])
                 band = (lum_p >= q20) & (lum_p <= q50)
                 cap_mu_p = pc_pair[band].mean(0)
-                lum = clay_raw @ LUM_W
+                lum = clay_sharp @ LUM_W
                 cap_mu_lc = float(max(lum[cpair].mean(), 1e-6))
                 ratio = np.clip(lum / cap_mu_lc, 0.6, 1.4)
-                cap_mapped = np.clip(cap_mu_p[None] * ratio[:, None], 0.0, 1.0)
+                cap_mapped = cap_mu_p[None] * ratio[:, None]
+                if args.hair_chroma > 0:
+                    # MODULATE the photo-hair base by TripoSR's LOCAL chroma
+                    # deviation about the applied-zone mean (mean-free: the
+                    # base hue stays the measured photo hair; the deviation
+                    # adds the crown's tonal variation instead of a flat fill)
+                    dev = clay_sharp - lum[:, None]
+                    zone = clay_ok & (w_cap > 0.5)
+                    cap_dev_mu = (dev[zone].mean(0) if zone.any()
+                                  else dev[cpair].mean(0))
+                    cap_mapped = cap_mapped + args.hair_chroma * (dev - cap_dev_mu)
+                cap_mapped = np.clip(cap_mapped, 0.0, 1.0)
                 clay_col = ((1.0 - w_cap[:, None]) * clay_col
                             + w_cap[:, None] * cap_mapped)
                 cap_info = {"applied": True, "pairs": n_cpair,
-                            "mode": "photo-hair palette x TripoSR luminance",
+                            "mode": "photo-hair palette x TripoSR luminance "
+                                    "+ local chroma deviation",
                             "cap_y_cm": [round(cap0, 2), round(cap1, 2)],
                             "skull_back": {"y_ear": round(y_ear, 2),
                                            "z_ear": round(z_ear, 2)},
                             "photo_hair_mu": np.round(cap_mu_p, 3).tolist(),
-                            "clay_cap_lum_mu": round(cap_mu_lc, 3)}
+                            "clay_cap_lum_mu": round(cap_mu_lc, 3),
+                            "hair_knn": args.hair_knn,
+                            "hair_chroma": args.hair_chroma,
+                            "clay_dev_mu": (np.round(cap_dev_mu, 4).tolist()
+                                            if cap_dev_mu is not None else None)}
             else:
                 cap_info = {"applied": False, "pairs": n_cpair,
                             "reason": f"cap pairs < {args.cap_min_pairs}"}
         else:
             cap_info = {"applied": False, "reason": "--no-cap-match"}
+        # controlled saturation lift over the hair/back zone (feathered by
+        # backfacing-ness so the photo-lit front is untouched): counters the
+        # residual desaturation of TripoSR's hallucinated palette. Applied to
+        # the FILL only -- at the jaw feather the fill is palette-matched and
+        # w_back ramps from 0, so no chroma step appears at the seam.
+        if args.back_sat != 1.0:
+            w_back = np.maximum(w_cap, smoothstep(-ndotv, 0.0, 0.25))
+            lum_cc = clay_col @ LUM_W
+            sat = 1.0 + (args.back_sat - 1.0) * w_back
+            clay_col = np.clip(lum_cc[:, None]
+                               + sat[:, None] * (clay_col - lum_cc[:, None]),
+                               0.0, 1.0)
         print(f"[s5] clay-fillable texels: {int(clay_ok.sum())}; "
-              f"palette match: {match_info}; cap match: {cap_info}")
+              f"palette match: {match_info}; cap match: {cap_info}; "
+              f"back-sat lift: {args.back_sat}")
     else:
         print(f"[s5 WARN] {clay_ply} missing -- no clay fill (holes -> inpaint)")
 
@@ -588,15 +727,40 @@ def main():
     from common import EYE_SOCKETS
     vcol[EYE_SOCKETS[0]:EYE_SOCKETS[1]] = skin_mean * 0.8  # shadowed lid skin
     if ctree is not None:
-        dist_v, ccol_raw_v = sample_clay(ctree, ccols, expressed[ext_v],
-                                         args.clay_knn)
-        ccol_v = np.clip(ccol_raw_v * gain + offs, 0.0, 1.0)
+        # SAME improved recipe as the albedo: lumachroma transfer, sharper
+        # hair-zone k-NN + chroma-deviation modulation, back-sat lift --
+        # RestMat (tile-1+ scalp/back polys) must stay consistent with tile 0.
+        pos_v = expressed[ext_v]
+        dist_v, ccol_raw_v = sample_clay(ctree, ccols, pos_v, args.clay_knn)
+        if lc_params is not None:
+            ccol_v = apply_luma_chroma(lc_params, ccol_raw_v)
+        else:
+            ccol_v = np.clip(ccol_raw_v * gain + offs, 0.0, 1.0)
+        w_cap_v = hair_zone_w(pos_v)
+        sharp_v = ccol_raw_v
+        hz_v = w_cap_v > 0.0
+        if args.hair_knn != args.clay_knn and hz_v.any():
+            _, cs_v = sample_clay(ctree, ccols, pos_v[hz_v], args.hair_knn)
+            sharp_v = ccol_raw_v.copy()
+            sharp_v[hz_v] = cs_v
         if cap_info.get("applied"):
-            w_cap_v = hair_zone_w(expressed[ext_v])
-            ratio_v = np.clip((ccol_raw_v @ LUM_W) / cap_mu_lc, 0.6, 1.4)
-            cap_v = np.clip(cap_mu_p[None] * ratio_v[:, None], 0.0, 1.0)
+            lum_v = sharp_v @ LUM_W
+            ratio_v = np.clip(lum_v / cap_mu_lc, 0.6, 1.4)
+            cap_v = cap_mu_p[None] * ratio_v[:, None]
+            if args.hair_chroma > 0 and cap_dev_mu is not None:
+                cap_v = cap_v + args.hair_chroma * (
+                    (sharp_v - lum_v[:, None]) - cap_dev_mu)
+            cap_v = np.clip(cap_v, 0.0, 1.0)
             ccol_v = ((1.0 - w_cap_v[:, None]) * ccol_v
                       + w_cap_v[:, None] * cap_v)
+        if args.back_sat != 1.0:
+            w_back_v = np.maximum(w_cap_v,
+                                  smoothstep(-nv_v[ext_v], 0.0, 0.25))
+            lum_cv = ccol_v @ LUM_W
+            sat_v = 1.0 + (args.back_sat - 1.0) * w_back_v
+            ccol_v = np.clip(lum_cv[:, None]
+                             + sat_v[:, None] * (ccol_v - lum_cv[:, None]),
+                             0.0, 1.0)
         near = dist_v < args.clay_max_dist
         tmp = vcol[ext_v]
         tmp[near] = ccol_v[near]
@@ -636,6 +800,7 @@ def main():
         },
         "back_scalp_mean_rgb": np.round(vcol[back_scalp].mean(0), 3).tolist()
                                if back_scalp.any() else None,
+        "back_scalp_saturation": sat_metrics(vcol[back_scalp]),
         "skin_mean_rgb": np.round(skin_mean, 3).tolist(),
     }
     print(f"[s5] vertex fill: {vertex_fill}")
@@ -650,10 +815,20 @@ def main():
             "default_frac": float((src[back_t] == 4).mean()),
             "hole_frac_pre_inpaint": float(holes[back_t].mean()),
             "mean_rgb": np.round(col[back_t].mean(0), 3).tolist(),
+            "saturation": sat_metrics(col[back_t]),
         }
     else:
         back_region = {"texels": 0}
     print(f"[s5] back-region texels (exterior, dot(n,view)<=0): {back_region}")
+    if ctree is not None:
+        hz_t = ext & clay_ok & (w_cap > 0.5)
+        hair_zone = {"texels": int(hz_t.sum()),
+                     "mean_rgb": (np.round(col[hz_t].mean(0), 3).tolist()
+                                  if hz_t.any() else None),
+                     "saturation": sat_metrics(col[hz_t])}
+    else:
+        hair_zone = {"texels": 0}
+    print(f"[s5] hair-zone texels (composed): {hair_zone}")
     wmap = np.zeros((T, T))
     wmap[covered] = w_photo
     Image.fromarray((wmap * 255).astype(np.uint8)).save(od / "debug_w_photo.png")
@@ -684,6 +859,11 @@ def main():
         },
         "person_mask": bg_info,
         "backdrop_rejected_texels": n_bg,
+        "params": {"clay_transfer": args.clay_transfer,
+                   "hair_knn": args.hair_knn, "clay_knn": args.clay_knn,
+                   "hair_chroma": args.hair_chroma, "back_sat": args.back_sat,
+                   "ndotv_lo": args.ndotv_lo, "ndotv_hi": args.ndotv_hi,
+                   "bg_blur_sigma": args.bg_blur_sigma},
         "clay_match": match_info,
         "cap_match": cap_info,
         "winding": {"frac_ndotv_neg_on_depth_pass": frac_neg,
@@ -695,6 +875,7 @@ def main():
                           for i, n in enumerate(region_names)},
         "central_face": cf,
         "back_region": back_region,
+        "hair_zone": hair_zone,
         "vertex_fill": vertex_fill,
         "sanity_pass": sanity_pass,
         "expression_applied": not args.no_expression,
